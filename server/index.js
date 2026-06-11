@@ -21,6 +21,7 @@ const automationsRoutes = require('./routes/automations')
 const scheduleRoutes = require('./routes/schedule')
 const thesisRoutes = require('./routes/thesis')
 const snifferRoutes = require('./routes/sniffers')
+const marketingRoutes = require('./routes/marketing')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/stats', statsRoutes)
@@ -33,6 +34,7 @@ app.use('/api/automations', automationsRoutes)
 app.use('/api/schedule', scheduleRoutes)
 app.use('/api/thesis', thesisRoutes)
 app.use('/api/sniffers', snifferRoutes)
+app.use('/api/marketing', marketingRoutes)
 
 // Start background scheduler
 const { startScheduler } = require('./services/scheduler')
@@ -74,6 +76,29 @@ setInterval(runEnrichment, 15 * 60 * 1000)
 // Run once on startup after a delay
 setTimeout(runSniffers, 10000)
 setTimeout(runEnrichment, 20000)
+
+// Marketing cycle — event campaigns every 6h, check enabled in app_settings
+async function runMarketingCycle() {
+  const db = require('./db').getDb()
+  const enabled = (db.prepare("SELECT value FROM app_settings WHERE key = 'event_marketing_enabled'").get() || {}).value
+  if (enabled === '0') return
+  try {
+    const { sendEventCampaign } = require('./services/eventMarketing')
+    const result = await sendEventCampaign()
+    if (result.sent > 0) console.log(`[Marketing] Event campaign: ${result.sent} sent for ${result.event}`)
+  } catch (e) { console.error('[Marketing] Event cycle error:', e.message) }
+}
+
+// Run every 6 hours (at 0,6,12,18)
+setInterval(runMarketingCycle, 6 * 60 * 60 * 1000)
+// Also check if we should run now (based on current hour)
+const currentHour = new Date().getHours()
+if (currentHour % 6 === 0) setTimeout(runMarketingCycle, 30000)
+else {
+  // Run at next 6h boundary
+  const nextRun = (6 - (currentHour % 6)) * 60 * 60 * 1000
+  setTimeout(runMarketingCycle, Math.min(nextRun, 6 * 60 * 60 * 1000))
+}
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'public', 'index.html'))
