@@ -108,4 +108,44 @@ router.post('/import-from-iptv', authMiddleware, async (req, res) => {
   }
 })
 
+router.get('/export', authMiddleware, (req, res) => {
+  const db = getDb()
+  const { source, language, intent, status } = req.query
+  let sql = 'SELECT * FROM leads WHERE 1=1'
+  const params = []
+  if (source) { sql += ' AND source = ?'; params.push(source) }
+  if (language) { sql += ' AND language = ?'; params.push(language) }
+  if (intent) { sql += ' AND intent_label = ?'; params.push(intent) }
+  if (status) { sql += ' AND status = ?'; params.push(status) }
+  sql += ' ORDER BY intent_score DESC, created_at DESC'
+
+  const leads = db.prepare(sql).all(...params)
+
+  const headers = ['id','source','language','username','first_name','last_name','phone','email','content','name','campaign_name','country','pain_point','opportunity','source_url','platform','intent_score','intent_label','status','notes','imported_from','created_at']
+  const escapeCsv = v => { const s = String(v || ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s }
+
+  const csv = [
+    headers.join(','),
+    ...leads.map(l => headers.map(h => escapeCsv(l[h])).join(','))
+  ].join('\n')
+
+  res.setHeader('Content-Type', 'text/csv')
+  res.setHeader('Content-Disposition', `attachment; filename=leads-export-${Date.now()}.csv`)
+  res.send(csv)
+})
+
+router.get('/stats', authMiddleware, (req, res) => {
+  const db = getDb()
+  const total = db.prepare('SELECT COUNT(*) as c FROM leads').get().c || 0
+  const today = db.prepare("SELECT COUNT(*) as c FROM leads WHERE date(created_at) = date('now')").get().c || 0
+  const bySource = db.prepare('SELECT source, COUNT(*) as count FROM leads GROUP BY source ORDER BY count DESC').all()
+  const byLanguage = db.prepare('SELECT language, COUNT(*) as count FROM leads GROUP BY language ORDER BY count DESC').all()
+  const byIntent = db.prepare('SELECT intent_label, COUNT(*) as count FROM leads WHERE intent_label IS NOT NULL GROUP BY intent_label ORDER BY count DESC').all()
+  const avgScore = db.prepare('SELECT AVG(intent_score) as avg FROM leads WHERE intent_score > 0').get().avg || 0
+  const withEmail = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email != '' AND email IS NOT NULL").get().c || 0
+  const withPhone = db.prepare("SELECT COUNT(*) as c FROM leads WHERE phone != '' AND phone IS NOT NULL").get().c || 0
+
+  res.json({ total, today, bySource, byLanguage, byIntent, avgScore, withEmail, withPhone })
+})
+
 module.exports = router

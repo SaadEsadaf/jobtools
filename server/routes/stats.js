@@ -25,6 +25,10 @@ router.get('/', authMiddleware, (req, res) => {
   const aiUsageByDay = db.prepare("SELECT date(created_at) as day, COUNT(*) as count FROM ai_usage_log GROUP BY date(created_at) ORDER BY day DESC LIMIT 14").all()
   const scheduledUpcoming = db.prepare("SELECT * FROM scheduled_posts WHERE status = 'pending' AND scheduled_at > datetime('now') ORDER BY scheduled_at ASC LIMIT 10").all()
 
+  const snifferSources = db.prepare('SELECT platform, COUNT(*) as count, SUM(lead_count) as total_leads FROM sniffer_sources GROUP BY platform').all()
+  const leadsToday = db.prepare("SELECT COUNT(*) as c FROM leads WHERE date(created_at) = date('now')").get().c || 0
+  const enrichedCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE intent_score > 0 AND intent_score IS NOT NULL").get().c || 0
+
   const sourceBreakdown = db.prepare('SELECT source, COUNT(*) as count FROM leads GROUP BY source ORDER BY count DESC').all()
   const langBreakdown = db.prepare('SELECT language, COUNT(*) as count FROM leads GROUP BY language ORDER BY count DESC').all()
   const intentBreakdown = db.prepare('SELECT intent_label, COUNT(*) as count FROM leads WHERE intent_label IS NOT NULL GROUP BY intent_label ORDER BY count DESC').all()
@@ -48,6 +52,11 @@ router.get('/', authMiddleware, (req, res) => {
       aiCalls,
       aiSuccess,
       aiToday
+    },
+    snifferStats: {
+      snifferSources,
+      leadsToday,
+      enrichedCount
     },
     breakdowns: {
       sourceBreakdown,

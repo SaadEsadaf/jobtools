@@ -17,6 +17,15 @@ function getDb() {
 }
 
 function migrate() {
+  try { db.exec("ALTER TABLE leads ADD COLUMN content TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN campaign_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN country TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN pain_point TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN opportunity TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN source_url TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN platform TEXT"); } catch (e) {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +44,14 @@ function migrate() {
       last_name TEXT,
       phone TEXT,
       email TEXT,
+      content TEXT,
+      name TEXT,
+      campaign_name TEXT,
+      country TEXT,
+      pain_point TEXT,
+      opportunity TEXT,
+      source_url TEXT,
+      platform TEXT,
       intent_score INTEGER DEFAULT 0,
       intent_label TEXT,
       status TEXT DEFAULT 'new',
@@ -43,6 +60,20 @@ function migrate() {
       imported_from TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS sniffer_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      platform TEXT NOT NULL,
+      name TEXT NOT NULL,
+      query TEXT,
+      enabled INTEGER DEFAULT 1,
+      lead_count INTEGER DEFAULT 0,
+      sniff_count INTEGER DEFAULT 0,
+      last_sniffed DATETIME,
+      discovered_by TEXT DEFAULT 'seed',
+      first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(platform, name)
     );
 
     CREATE TABLE IF NOT EXISTS campaigns (

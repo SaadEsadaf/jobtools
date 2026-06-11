@@ -157,6 +157,7 @@
     <button data-tab="queue">📦 File d'attente</button>
     <button data-tab="brain">🧠 Pont IPTV-Boss</button>
     <button data-tab="ai">🤖 IA</button>
+    <button data-tab="sniffers">🕵️ Sniffeurs</button>
     <button data-tab="apis">🔌 APIs Sociales</button>
     <button data-tab="automations">⚡ Automations</button>
     <button data-tab="thesis">🎓 Thesis Demo</button>
@@ -172,6 +173,7 @@
     <div class="tab-content" id="tab-queue"></div>
     <div class="tab-content" id="tab-brain"></div>
     <div class="tab-content" id="tab-ai"></div>
+    <div class="tab-content" id="tab-sniffers"></div>
     <div class="tab-content" id="tab-apis"></div>
     <div class="tab-content" id="tab-automations"></div>
     <div class="tab-content" id="tab-thesis"></div>
@@ -238,6 +240,7 @@ function loadTab(name) {
   else if (name === 'queue') loadQueue()
   else if (name === 'brain') loadBrain()
   else if (name === 'ai') loadAI()
+  else if (name === 'sniffers') loadSniffers()
   else if (name === 'apis') loadAPIs()
   else if (name === 'automations') loadAutomations()
   else if (name === 'thesis') loadThesis()
@@ -248,7 +251,7 @@ function loadTab(name) {
 async function loadDashboard() {
   const data = await api('/stats')
   if (!data) return
-  const { stats, breakdowns, recentInjectionLog, recentQueue, brainStatus, recentLeads } = data
+  const { stats, breakdowns, snifferStats, recentInjectionLog, recentQueue, brainStatus, recentLeads } = data
   const container = $('tab-dashboard')
 
   container.innerHTML = `
@@ -261,6 +264,7 @@ async function loadDashboard() {
       <div class="stat-card"><div class="value">${stats.brainDelivered}</div><div class="label">🧠 Pont IPTV-Boss</div><div class="sub">Notifications envoyées</div></div>
       <div class="stat-card"><div class="value">${stats.aiCalls}</div><div class="label">🤖 Appels IA</div><div class="sub">${stats.aiToday} aujourd'hui · ${stats.aiSuccess} succès</div></div>
       <div class="stat-card"><div class="value">${stats.scheduledCount || 0}</div><div class="label">📅 Publications programmées</div><div class="sub">En attente</div></div>
+      <div class="stat-card"><div class="value">${(snifferStats?.leadsToday) || 0}</div><div class="label">📅 Leads aujourd'hui</div><div class="sub">${(snifferStats?.enrichedCount) || 0} enrichis</div></div>
     </div>
 
     <div class="flex">
@@ -327,6 +331,8 @@ async function loadLeads(page = 1) {
         <input id="leads-search" placeholder="🔍 Rechercher..." onkeydown="if(event.key==='Enter')loadLeads()">
         <button onclick="loadLeads()">Filtrer</button>
         <button class="btn-secondary" onclick="importFromIPTV()">📥 Importer d'IPTV-Boss</button>
+        <button class="btn-secondary" onclick="exportLeadsCSV()">📤 Export CSV</button>
+        <button class="btn-secondary" onclick="enrichLeads()">🧠 Enrichir IA</button>
       </div>
       <table>
         <tr><th>ID</th><th>Source</th><th>Langue</th><th>Utilisateur</th><th>Téléphone</th><th>Email</th><th>Intention</th><th>Score</th><th>Statut</th><th>Date</th></tr>
@@ -354,6 +360,33 @@ async function importFromIPTV() {
   else showToast('Échec de l\'import', 'error')
   btn.disabled = false
   btn.textContent = '📥 Importer d\'IPTV-Boss'
+  loadLeads()
+}
+
+async function exportLeadsCSV() {
+  const params = new URLSearchParams()
+  if ($('leads-sources')?.value) params.set('source', $('leads-sources').value)
+  if ($('leads-langs')?.value) params.set('language', $('leads-langs').value)
+  if ($('leads-intents')?.value) params.set('intent', $('leads-intents').value)
+  const url = API + '/leads/export?' + params.toString()
+  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } })
+  if (!res.ok) return showToast('Export échoué', 'error')
+  const blob = await res.blob()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'leads-export-' + Date.now() + '.csv'
+  a.click()
+  showToast('Export téléchargé!')
+}
+
+async function enrichLeads() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = 'Enrichissement...'
+  const res = await api('/sniffers/enrich', { method: 'POST', body: JSON.stringify({ limit: 50 }) })
+  if (res) showToast(`${res.enriched} leads enrichis!`, 'success')
+  btn.disabled = false
+  btn.textContent = '🧠 Enrichir IA'
   loadLeads()
 }
 
@@ -653,6 +686,90 @@ async function testAllAI() {
   for (const [key] of enabled) {
     await testAI(key)
   }
+}
+
+// ==================== SNIFFERS ====================
+async function loadSniffers() {
+  const container = $('tab-sniffers')
+  container.innerHTML = '<div class="stats-grid" id="sniffer-stats"></div><div class="flex" style="margin-bottom:16px"><div class="card" style="flex:1"><h3>🕵️ Telegram Sniffer</h3><p>Scanne les canaux Telegram publics pour trouver des leads IPTV.</p><div class="filters" style="margin-top:12px"><button class="btn" onclick="runSniffer(\'telegram\')">▶️ Sniffer Telegram</button><button class="btn-secondary" onclick="discoverSources(\'telegram\')">🔍 Découvrir sources</button></div></div><div class="card" style="flex:1"><h3>🕵️ Twitter/X Sniffer</h3><p>Scanne Twitter via Nitter pour trouver des leads IPTV.</p><div class="filters" style="margin-top:12px"><button class="btn" onclick="runSniffer(\'twitter\')">▶️ Sniffer Twitter</button><button class="btn-secondary" onclick="discoverSources(\'twitter\')">🔍 Découvrir sources</button></div></div></div><div class="flex" style="margin-bottom:16px"><div class="card" style="flex:1"><h3>⚡ Sniffer Tout</h3><p>Lance tous les sniffers en parallèle.</p><div class="filters" style="margin-top:12px"><button class="btn" onclick="runAllSniffers()">▶️ Sniffer TOUT</button></div></div><div class="card" style="flex:1"><h3>🧠 Enrichissement IA</h3><p>Analyse les leads sans score avec l\'IA pour extraire email, téléphone, intention.</p><div class="filters" style="margin-top:12px"><button class="btn" onclick="runEnrich()">🧠 Enrichir 50 leads</button></div></div></div><div class="section"><h2>📡 Sources surveillées <span class="badge" id="source-count">0</span></h2><div class="filters"><select id="sniffer-platform-filter"><option value="">Toutes plateformes</option><option value="telegram">Telegram</option><option value="twitter">Twitter</option></select><button class="btn-sm" onclick="loadSnifferSources()">Filtrer</button></div><div id="sources-list"><p style="color:#555">Chargement...</p></div></div><div class="section"><h2>📊 Statistiques sniffers</h2><div id="sniffer-leaderboard"></div></div>'
+  loadSnifferStats()
+  loadSnifferSources()
+}
+
+async function loadSnifferStats() {
+  const data = await api('/sniffers/stats')
+  if (!data) return
+  $('sniffer-stats').innerHTML = `
+    <div class="stat-card"><div class="value">${data.totalLeads}</div><div class="label">🌐 Total Leads</div></div>
+    <div class="stat-card"><div class="value">${data.leadsToday}</div><div class="label">📅 Aujourd'hui</div></div>
+    <div class="stat-card"><div class="value">${data.enrichedCount}</div><div class="label">🧠 Enrichis</div></div>
+    ${(data.byPlatform||[]).map(p => `<div class="stat-card"><div class="value">${p.total_leads || p.count}</div><div class="label">📡 ${p.platform}</div></div>`).join('')}
+  `
+  $('source-count').textContent = data.byPlatform?.reduce((a,b) => a + parseInt(b.count), 0) || 0
+}
+
+async function loadSnifferSources() {
+  const platform = $('sniffer-platform-filter')?.value || ''
+  const data = await api('/sniffers/sources?platform=' + platform)
+  if (!data) return
+  $('sources-list').innerHTML = data.length ? `<table><tr><th>Plateforme</th><th>Nom</th><th>Leads</th><th>Scans</th><th>Dernier scan</th><th>Découvert par</th><th>Activé</th><th>Action</th></tr>${data.map(s => `<tr><td>${s.platform}</td><td>${s.name}</td><td>${s.lead_count || 0}</td><td>${s.sniff_count || 0}</td><td>${s.last_sniffed ? new Date(s.last_sniffed).toLocaleString() : '-'}</td><td>${s.discovered_by || 'seed'}</td><td>${s.enabled ? '✅' : '❌'}</td><td><button class="btn-sm btn-secondary" onclick="toggleSource(${s.id})">${s.enabled ? 'Désactiver' : 'Activer'}</button><button class="btn-sm btn-warning" onclick="deleteSource(${s.id})" style="margin-left:4px">🗑</button></td></tr>`).join('')}</table>` : '<p style="color:#555">Aucune source configurée</p>'
+}
+
+async function runSniffer(platform) {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = 'Scan en cours...'
+  const res = await api('/sniffers/run/' + platform, { method: 'POST' })
+  if (res) showToast(`${res.leads_found} leads trouvés sur ${platform}!`, 'success')
+  btn.disabled = false
+  btn.textContent = '▶️ Sniffer ' + platform.charAt(0).toUpperCase() + platform.slice(1)
+  loadSnifferStats()
+  loadSnifferSources()
+}
+
+async function runAllSniffers() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = 'Scan en cours...'
+  const res = await api('/sniffers/run/all', { method: 'POST' })
+  if (res) showToast(`${res.total} leads trouvés au total!`, 'success')
+  btn.disabled = false
+  btn.textContent = '▶️ Sniffer TOUT'
+  loadSnifferStats()
+  loadSnifferSources()
+}
+
+async function discoverSources(platform) {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = 'Découverte...'
+  const res = await api('/sniffers/discover', { method: 'POST', body: JSON.stringify({ platform }) })
+  if (res) showToast(`${res.discovered} nouvelles sources ${platform} découvertes!`, 'success')
+  btn.disabled = false
+  btn.textContent = '🔍 Découvrir sources'
+  loadSnifferSources()
+}
+
+async function toggleSource(id) {
+  await api('/sniffers/sources/toggle/' + id, { method: 'POST' })
+  loadSnifferSources()
+}
+
+async function deleteSource(id) {
+  if (!confirm('Supprimer cette source ?')) return
+  await api('/sniffers/sources/' + id, { method: 'DELETE' })
+  loadSnifferSources()
+}
+
+async function runEnrich() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = 'Enrichissement...'
+  const res = await api('/sniffers/enrich', { method: 'POST', body: JSON.stringify({ limit: 50 }) })
+  if (res) showToast(`${res.enriched} leads enrichis!`, 'success')
+  btn.disabled = false
+  btn.textContent = '🧠 Enrichir 50 leads'
+  loadSnifferStats()
 }
 
 // ==================== SOCIAL APIS ====================
