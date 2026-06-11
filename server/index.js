@@ -18,6 +18,7 @@ const templatesRoutes = require('./routes/templates')
 const brainRoutes = require('./routes/brain')
 const settingsRoutes = require('./routes/settings')
 const automationsRoutes = require('./routes/automations')
+const scheduleRoutes = require('./routes/schedule')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/stats', statsRoutes)
@@ -27,6 +28,11 @@ app.use('/api/templates', templatesRoutes)
 app.use('/api/brain', brainRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/automations', automationsRoutes)
+app.use('/api/schedule', scheduleRoutes)
+
+// Start background scheduler
+const { startScheduler } = require('./services/scheduler')
+startScheduler(60000)
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'public', 'index.html'))

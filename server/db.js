@@ -110,6 +110,35 @@ function migrate() {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS scheduled_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      content TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      action_type TEXT DEFAULT 'post',
+      params TEXT,
+      scheduled_at DATETIME NOT NULL,
+      status TEXT DEFAULT 'pending',
+      campaign_id INTEGER,
+      ai_generated INTEGER DEFAULT 0,
+      provider_used TEXT,
+      result TEXT,
+      posted_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider TEXT,
+      model TEXT,
+      prompt_length INTEGER,
+      response_length INTEGER,
+      duration_ms INTEGER,
+      success INTEGER DEFAULT 1,
+      error TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 }
 

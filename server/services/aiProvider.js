@@ -30,16 +30,35 @@ async function generate(prompt, options = {}) {
   const provider = providers[preferred]
   if (!provider || !provider.enabled) throw new Error(`Provider "${preferred}" not enabled`)
 
-  switch (preferred) {
-    case 'ollama': return callOllama(prompt, provider, options)
-    case 'openai': return callOpenAI(prompt, provider, options)
-    case 'gemini': return callGemini(prompt, provider, options)
-    case 'groq': return callGroq(prompt, provider, options)
-    case 'claude': return callClaude(prompt, provider, options)
-    case 'deepseek': return callDeepSeek(prompt, provider, options)
-    case 'mistral': return callMistral(prompt, provider, options)
-    default: throw new Error(`Unknown provider: ${preferred}`)
+  const start = Date.now()
+  try {
+    let result
+    switch (preferred) {
+      case 'ollama': result = await callOllama(prompt, provider, options); break
+      case 'openai': result = await callOpenAI(prompt, provider, options); break
+      case 'gemini': result = await callGemini(prompt, provider, options); break
+      case 'groq': result = await callGroq(prompt, provider, options); break
+      case 'claude': result = await callClaude(prompt, provider, options); break
+      case 'deepseek': result = await callDeepSeek(prompt, provider, options); break
+      case 'mistral': result = await callMistral(prompt, provider, options); break
+      default: throw new Error(`Unknown provider: ${preferred}`)
+    }
+    logUsage(preferred, provider.model || '', prompt.length, result.length, Date.now() - start, true)
+    return result
+  } catch (err) {
+    logUsage(preferred, provider.model || '', prompt.length, 0, Date.now() - start, false, err.message)
+    throw err
   }
+}
+
+function logUsage(provider, model, promptLen, responseLen, durationMs, success, error) {
+  try {
+    const db = getDb()
+    db.prepare(`
+      INSERT INTO ai_usage_log (provider, model, prompt_length, response_length, duration_ms, success, error, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(provider, model, promptLen, responseLen, durationMs, success ? 1 : 0, error || null, new Date().toISOString())
+  } catch (e) { /* silent */ }
 }
 
 async function generateWithFallback(prompt, options = {}) {

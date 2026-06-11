@@ -256,6 +256,8 @@ async function loadDashboard() {
       <div class="stat-card"><div class="value">${stats.pendingQueue}</div><div class="label">📦 En attente</div><div class="sub">Contenu à poster</div></div>
       <div class="stat-card"><div class="value">${stats.injections}</div><div class="label">⚡ Injections</div><div class="sub">Templates injectés</div></div>
       <div class="stat-card"><div class="value">${stats.brainDelivered}</div><div class="label">🧠 Pont IPTV-Boss</div><div class="sub">Notifications envoyées</div></div>
+      <div class="stat-card"><div class="value">${stats.aiCalls}</div><div class="label">🤖 Appels IA</div><div class="sub">${stats.aiToday} aujourd'hui · ${stats.aiSuccess} succès</div></div>
+      <div class="stat-card"><div class="value">${stats.scheduledCount || 0}</div><div class="label">📅 Publications programmées</div><div class="sub">En attente</div></div>
     </div>
 
     <div class="flex">
@@ -270,6 +272,17 @@ async function loadDashboard() {
       <div class="card">
         <h3>🎯 Intentions</h3>
         ${breakdowns.intentBreakdown.map(s => `<div class="breakdown-item"><span class="key">${s.intent_label || 'non classé'}</span><span class="val">${s.count}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="flex">
+      <div class="card">
+        <h3>🤖 Utilisation IA par provider</h3>
+        ${data.aiUsage?.byProvider?.length ? `<table><tr><th>Provider</th><th>Appels</th><th>Succès</th><th>Ø ms</th></tr>${data.aiUsage.byProvider.map(p => `<tr><td>${p.provider}</td><td>${p.count}</td><td>${p.success_count || 0}</td><td>${p.avg_ms || '-'}</td></tr>`).join('')}</table>` : '<p style="color:#555">Aucun appel IA encore</p>'}
+      </div>
+      <div class="card">
+        <h3>📅 Publications programmées</h3>
+        ${data.scheduledUpcoming?.length ? `<table><tr><th>Plateforme</th><th>Titre</th><th>Prévu le</th></tr>${data.scheduledUpcoming.map(p => `<tr><td>${p.platform}</td><td>${p.title || '-'}</td><td>${new Date(p.scheduled_at).toLocaleString()}</td></tr>`).join('')}</table>` : '<p style="color:#555">Aucune programmation</p>'}
       </div>
     </div>
 
@@ -783,8 +796,120 @@ async function loadAutomations() {
         <button class="btn" onclick="directPublish()" style="margin-top:8px">📤 Publier maintenant</button>
         <div id="publish-result" style="margin-top:8px"></div>
       </div>
+      <div class="card" style="margin-top:16px">
+        <h3>📅 Programmer une publication</h3>
+        <div class="flex" style="gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <label>Titre (optionnel)</label>
+            <input id="sched-title" placeholder="Titre de la publication">
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label>Plateforme</label>
+            <select id="sched-platform">
+              <option value="reddit">👽 Reddit</option>
+              <option value="facebook">📘 Facebook</option>
+              <option value="youtube">▶️ YouTube</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label>Action</label>
+            <select id="sched-action">
+              <option value="post">Poster</option>
+              <option value="comment">Commenter</option>
+              <option value="dm">MP (Reddit)</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label>Date & Heure</label>
+            <input id="sched-datetime" type="datetime-local">
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <label>Contenu (ou "AI: votre prompt" pour génération auto)</label>
+          <textarea id="sched-content" rows="3" placeholder="Texte de la publication ou AI: Génére un post sur..." style="font-family:monospace;font-size:12px"></textarea>
+        </div>
+        <div style="margin-top:8px">
+          <label>Paramètres JSON (optionnel)</label>
+          <textarea id="sched-params" rows="2" placeholder='{"subreddit":"iptv","title":"Mon titre"}' style="font-family:monospace;font-size:12px"></textarea>
+        </div>
+        <button class="btn" onclick="schedulePost()" style="margin-top:8px">📅 Programmer</button>
+        <div id="sched-result" style="margin-top:8px"></div>
+      </div>
+      <div class="card" style="margin-top:16px" id="calendar-container">
+        <h3>📆 Calendrier des publications</h3>
+        <div id="calendar-content"><p style="color:#555">Chargement...</p></div>
+      </div>
     </div>
   `
+  loadCalendar()
+}
+
+async function loadCalendar() {
+  const res = await api('/schedule/calendar')
+  if (!res) return
+  const calDiv = $('calendar-content')
+  if (!calDiv) return
+  const { posts, grouped } = res
+  const days = Object.keys(grouped).sort()
+  if (!days.length) { calDiv.innerHTML = '<p style="color:#555">Aucune publication programmée</p>'; return }
+
+  const weekDays = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam']
+  const months = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc']
+
+  let html = ''
+  for (const day of days) {
+    const d = new Date(day + 'T12:00:00')
+    const label = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} (${weekDays[d.getDay()]})`
+    const dayPosts = grouped[day]
+    html += `<div style="margin-bottom:12px"><strong style="color:#4fc3f7;font-size:13px">${label}</strong> <span class="badge-status ${dayPosts.some(p=>p.status==='pending')?'badge-new':'badge-executed'}" style="font-size:10px">${dayPosts.length}</span>`
+    html += dayPosts.map(p => `<div class="flex" style="justify-content:space-between;align-items:center;padding:6px 8px;background:#151515;border-radius:4px;margin-top:4px">
+      <div><span style="font-size:12px;color:#888">${p.platform}</span> <span style="font-size:12px;color:#ccc">${p.title || p.action_type}</span> ${p.ai_generated ? '<span class="badge-status badge-new" style="font-size:9px">🤖IA</span>' : ''}</div>
+      <div><span class="badge-status ${p.status === 'posted' ? 'badge-executed' : p.status === 'failed' ? 'badge-unsubscribed' : 'badge-new'}">${p.status}</span>
+      ${p.status === 'pending' ? `<button class="btn-sm" onclick="postNow(${p.id})" style="margin-left:4px">▶️</button> <button class="btn-sm btn-secondary" onclick="deleteSched(${p.id})" style="margin-left:2px">✕</button>` : ''}</div>
+    </div>`).join('')
+    html += '</div>'
+  }
+  calDiv.innerHTML = html
+}
+
+async function schedulePost() {
+  const content = $('sched-content').value
+  const platform = $('sched-platform').value
+  const actionType = $('sched-action').value
+  const scheduledAt = $('sched-datetime').value
+  if (!content || !scheduledAt) return showToast('Contenu et date requis', 'error')
+
+  let params = {}
+  try { params = JSON.parse($('sched-params').value || '{}') } catch {}
+
+  const res = await api('/schedule', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: $('sched-title').value || null,
+      content,
+      platform,
+      action_type: actionType,
+      params,
+      scheduled_at: new Date(scheduledAt).toISOString(),
+      ai_generated: content.startsWith('AI:')
+    })
+  })
+  if (res?.scheduled) { showToast('✅ Programmé!'); loadCalendar() }
+  else showToast('Erreur: ' + (res?.error || ''), 'error')
+}
+
+async function postNow(id) {
+  const res = await api('/schedule/' + id + '/post-now', { method: 'POST' })
+  if (res?.posted) showToast('✅ Publié!')
+  else showToast('Erreur: ' + (res?.error || ''), 'error')
+  loadCalendar()
+}
+
+async function deleteSched(id) {
+  if (!confirm('Supprimer?')) return
+  await api('/schedule/' + id, { method: 'DELETE' })
+  showToast('Supprimé')
+  loadCalendar()
 }
 
 async function generateMarketingContent() {
