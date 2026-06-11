@@ -152,4 +152,74 @@ function seedDefaults() {
   }
 }
 
-module.exports = { sniffYoutube, seedDefaults }
+async function fetchVideoComments(videoId, apiKey) {
+  const comments = []
+  try {
+    const url = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=50&key=${apiKey}`
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!res.ok) return comments
+    const data = await res.json()
+    if (data.error) return comments
+    for (const item of data.items || []) {
+      const snippet = item.snippet?.topLevelComment?.snippet || {}
+      const text = (snippet.textDisplay || '').trim()
+      if (text.length < 10) continue
+      comments.push({
+        author: snippet.authorDisplayName || '',
+        text,
+        email: extractEmail(text),
+        publishedAt: snippet.publishedAt || new Date().toISOString()
+      })
+    }
+  } catch (e) { /* silent */ }
+  return comments
+}
+
+async function sniffYoutubeComments() {
+  const db = getDb()
+  const apiKey = getApiKey()
+  if (!apiKey) return 0
+
+  let totalLeads = 0
+  const seenEmails = new Set()
+
+  for (const term of SEARCH_TERMS.slice(0, 5)) {
+    const videos = await searchYoutubeAPI(term + ' comments', apiKey)
+    for (const video of videos) {
+      if (!video.video_id) continue
+      await new Promise(r => setTimeout(r, 500 + Math.random() * 1000))
+      const comments = await fetchVideoComments(video.video_id, apiKey)
+      for (const comment of comments) {
+        if (!comment.email && comment.text.length < 60) continue
+        const existing = db.prepare("SELECT id FROM leads WHERE source_url = ? AND username = ?")
+          .get(`yt_comment:${video.video_id}`, comment.author)
+        if (existing) continue
+        const email = comment.email || ''
+        if (email) {
+          if (seenEmails.has(email)) continue
+          seenEmails.add(email)
+        }
+        try {
+          db.prepare(`
+            INSERT INTO leads (source, username, content, email, intent_score, language, raw_data, imported_from, source_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'youtube_comments', ?, ?, ?)
+          `).run(
+            'youtube_comment', comment.author,
+            comment.text.substring(0, 2000), email,
+            email ? 85 : 50, detectLanguage(comment.text),
+            JSON.stringify(comment),
+            `yt_comment:${video.video_id}`,
+            comment.publishedAt, comment.publishedAt
+          )
+          totalLeads++
+        } catch (e) { /* skip */ }
+      }
+    }
+    await new Promise(r => setTimeout(r, 1000))
+  }
+  db.prepare('UPDATE sniffer_sources SET lead_count = lead_count + ?, sniff_count = sniff_count + 1, last_sniffed = ? WHERE platform = ?')
+    .run(totalLeads, new Date().toISOString(), 'youtube_comments')
+  return totalLeads
+}
+
+module.exports = { sniffYoutube, sniffYoutubeComments, seedDefaults }
