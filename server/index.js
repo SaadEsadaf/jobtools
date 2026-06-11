@@ -19,6 +19,7 @@ const brainRoutes = require('./routes/brain')
 const settingsRoutes = require('./routes/settings')
 const automationsRoutes = require('./routes/automations')
 const scheduleRoutes = require('./routes/schedule')
+const thesisRoutes = require('./routes/thesis')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/stats', statsRoutes)
@@ -29,6 +30,7 @@ app.use('/api/brain', brainRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/automations', automationsRoutes)
 app.use('/api/schedule', scheduleRoutes)
+app.use('/api/thesis', thesisRoutes)
 
 // Start background scheduler
 const { startScheduler } = require('./services/scheduler')

