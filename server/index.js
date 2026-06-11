@@ -16,6 +16,8 @@ const leadsRoutes = require('./routes/leads')
 const campaignsRoutes = require('./routes/campaigns')
 const templatesRoutes = require('./routes/templates')
 const brainRoutes = require('./routes/brain')
+const settingsRoutes = require('./routes/settings')
+const automationsRoutes = require('./routes/automations')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/stats', statsRoutes)
@@ -23,6 +25,8 @@ app.use('/api/leads', leadsRoutes)
 app.use('/api/campaigns', campaignsRoutes)
 app.use('/api/templates', templatesRoutes)
 app.use('/api/brain', brainRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/automations', automationsRoutes)
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'client', 'public', 'index.html'))

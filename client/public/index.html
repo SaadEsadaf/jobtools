@@ -156,6 +156,9 @@
     <button data-tab="injection">⚡ Injection</button>
     <button data-tab="queue">📦 File d'attente</button>
     <button data-tab="brain">🧠 Pont IPTV-Boss</button>
+    <button data-tab="ai">🤖 IA</button>
+    <button data-tab="apis">🔌 APIs Sociales</button>
+    <button data-tab="automations">⚡ Automations</button>
     <button data-tab="settings">⚙️ Paramètres</button>
   </div>
 
@@ -167,6 +170,9 @@
     <div class="tab-content" id="tab-injection"></div>
     <div class="tab-content" id="tab-queue"></div>
     <div class="tab-content" id="tab-brain"></div>
+    <div class="tab-content" id="tab-ai"></div>
+    <div class="tab-content" id="tab-apis"></div>
+    <div class="tab-content" id="tab-automations"></div>
     <div class="tab-content" id="tab-settings"></div>
   </div>
 </div>
@@ -229,6 +235,9 @@ function loadTab(name) {
   else if (name === 'injection') loadInjection()
   else if (name === 'queue') loadQueue()
   else if (name === 'brain') loadBrain()
+  else if (name === 'ai') loadAI()
+  else if (name === 'apis') loadAPIs()
+  else if (name === 'automations') loadAutomations()
   else if (name === 'settings') loadSettings()
 }
 
@@ -524,7 +533,380 @@ function loadSettings() {
       </div>
     </div>
   `
+// ==================== AI PROVIDERS ====================
+async function loadAI() {
+  const providers = await api('/settings/ai-providers')
+  if (!providers) return
+  const container = $('tab-ai')
+  container.innerHTML = `
+    <div class="section">
+      <h2>🤖 Fournisseurs IA</h2>
+      <div class="alert alert-info">Configurez vos API IA pour générer du contenu marketing. L'IA locale Ollama est déjà configurée.</div>
+      <div class="card">
+        <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="margin:0">Providers</h3>
+          <div><button class="btn-sm btn-secondary" onclick="testAllAI()">🧪 Tester tout</button> <button class="btn-sm btn-secondary" onclick="if(confirm('Reset all providers?'))resetAI()">↺ Reset</button></div>
+        </div>
+        <div id="ai-providers-list"></div>
+        <button class="btn" onclick="saveAI()" style="margin-top:12px">💾 Sauvegarder tous les providers</button>
+      </div>
+    </div>
+  `
+  renderAIProviders(providers)
 }
+
+function renderAIProviders(providers) {
+  const list = $('ai-providers-list')
+  const providerMeta = {
+    ollama: { label: '🦙 Ollama (local)', fields: ['url', 'model'], free: true },
+    openai: { label: '🤖 OpenAI (GPT)', fields: ['apiKey', 'model'], free: false },
+    gemini: { label: '🌀 Google Gemini (gratuit)', fields: ['apiKey', 'model'], free: true },
+    groq: { label: '⚡ Groq (gratuit)', fields: ['apiKey', 'model'], free: true },
+    claude: { label: '🧠 Claude (Anthropic)', fields: ['apiKey', 'model'], free: false },
+    deepseek: { label: '🔍 DeepSeek (gratuit)', fields: ['apiKey', 'model'], free: true },
+    mistral: { label: '🌬️ Mistral (gratuit)', fields: ['apiKey', 'model'], free: true }
+  }
+
+  list.innerHTML = Object.entries(providers).map(([key, prov]) => {
+    const meta = providerMeta[key] || { label: key, fields: ['apiKey', 'model'], free: false }
+    return `<div class="card" style="margin-bottom:8px;padding:12px" data-provider="${key}">
+      <div class="flex" style="justify-content:space-between;align-items:center">
+        <div><strong>${meta.label}</strong> ${meta.free ? '<span class="badge-status badge-new">GRATUIT</span>' : '<span class="badge-status badge-contacted">PAID</span>'}</div>
+        <label style="display:flex;align-items:center;gap:4px;color:#888;font-size:12px">
+          <input type="checkbox" ${prov.enabled ? 'checked' : ''} onchange="toggleAIProvider('${key}',this.checked)"> Actif
+        </label>
+      </div>
+      <div class="provider-fields-${key}" style="margin-top:8px;display:${prov.enabled ? 'block' : 'none'}">
+        ${meta.fields.map(f => {
+          if (f === 'apiKey') return `<label style="font-size:11px;color:#666;display:block">Clé API</label><input class="ai-field" data-provider="${key}" data-field="apiKey" value="${prov.apiKey || ''}" placeholder="sk-..." style="width:100%;padding:6px 10px;margin-bottom:6px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:12px;font-family:monospace">`
+          if (f === 'url') return `<label style="font-size:11px;color:#666;display:block">URL</label><input class="ai-field" data-provider="${key}" data-field="url" value="${prov.url || ''}" style="width:100%;padding:6px 10px;margin-bottom:6px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:12px;font-family:monospace">`
+          if (f === 'model') return `<label style="font-size:11px;color:#666;display:block">Modèle</label><input class="ai-field" data-provider="${key}" data-field="model" value="${prov.model || ''}" style="width:100%;padding:6px 10px;margin-bottom:6px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:12px">`
+          return ''
+        }).join('')}
+        <button class="btn-sm btn-secondary" onclick="testAI('${key}')" style="margin-top:4px">🧪 Tester</button>
+        <span id="ai-test-${key}" style="font-size:11px;margin-left:8px"></span>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function toggleAIProvider(key, enabled) {
+  const fields = document.querySelector('.provider-fields-' + key)
+  if (fields) fields.style.display = enabled ? 'block' : 'none'
+}
+
+function collectAIProviders() {
+  const providers = {}
+  document.querySelectorAll('[data-provider]').forEach(el => {
+    const key = el.dataset.provider
+    const enabled = el.querySelector('input[type=checkbox]').checked
+    providers[key] = { enabled }
+    el.querySelectorAll('.ai-field').forEach(inp => {
+      providers[key][inp.dataset.field] = inp.value
+    })
+  })
+  return providers
+}
+
+async function saveAI() {
+  const providers = collectAIProviders()
+  const res = await api('/settings/ai-providers', { method: 'POST', body: JSON.stringify(providers) })
+  if (res?.saved) showToast('Providers sauvegardés!')
+}
+
+async function resetAI() {
+  await api('/settings/ai-providers/reset', { method: 'POST' })
+  showToast('Providers réinitialisés')
+  loadAI()
+}
+
+async function testAI(key) {
+  const span = $('ai-test-' + key)
+  span.textContent = '⏳ Test en cours...'
+  const res = await api('/settings/ai-providers/test/' + key, { method: 'POST' })
+  if (res?.ok) span.innerHTML = '✅ OK: ' + (res.response || '')
+  else span.innerHTML = '❌ ' + (res?.error || 'Échec')
+}
+
+async function testAllAI() {
+  const providers = collectAIProviders()
+  await saveAI()
+  const enabled = Object.entries(providers).filter(([k, v]) => v.enabled)
+  for (const [key] of enabled) {
+    await testAI(key)
+  }
+}
+
+// ==================== SOCIAL APIS ====================
+async function loadAPIs() {
+  const apis = await api('/settings/social-apis')
+  if (!apis) return
+  const container = $('tab-apis')
+  container.innerHTML = `
+    <div class="section">
+      <h2>🔌 APIs des plateformes sociales</h2>
+      <div class="alert alert-info">Configurez vos clés API pour poster automatiquement sur les réseaux sociaux.</div>
+      <div class="card">
+        <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="margin:0">Plateformes</h3>
+          <button class="btn-sm btn-secondary" onclick="resetAPIs()">↺ Reset</button>
+        </div>
+        <div id="social-apis-list"></div>
+        <button class="btn" onclick="saveAPIs()" style="margin-top:12px">💾 Sauvegarder toutes les APIs</button>
+      </div>
+    </div>
+  `
+  renderAPIs(apis)
+}
+
+function renderAPIs(apis) {
+  const list = $('social-apis-list')
+  const apiMeta = {
+    youtube: { label: '▶️ YouTube', fields: ['apiKey', 'clientId', 'clientSecret', 'channelId'] },
+    reddit: { label: '👽 Reddit', fields: ['clientId', 'clientSecret', 'username', 'password'] },
+    facebook: { label: '📘 Facebook', fields: ['appId', 'appSecret', 'pageId', 'pageAccessToken'] },
+    bing: { label: '🔎 Bing Search', fields: ['apiKey'] }
+  }
+
+  list.innerHTML = Object.entries(apis).map(([key, api]) => {
+    const meta = apiMeta[key] || { label: key, fields: ['apiKey'] }
+    return `<div class="card" style="margin-bottom:8px;padding:12px" data-api="${key}">
+      <div class="flex" style="justify-content:space-between;align-items:center">
+        <div><strong>${meta.label}</strong></div>
+        <label style="display:flex;align-items:center;gap:4px;color:#888;font-size:12px">
+          <input type="checkbox" ${api.enabled ? 'checked' : ''} onchange="toggleAPI('${key}',this.checked)"> Actif
+        </label>
+      </div>
+      <div class="api-fields-${key}" style="margin-top:8px;display:${api.enabled ? 'block' : 'none'}">
+        ${meta.fields.map(f => `<label style="font-size:11px;color:#666;display:block;margin-top:4px">${f}</label>
+          <input class="api-field" data-api="${key}" data-field="${f}" value="${api[f] || ''}" style="width:100%;padding:6px 10px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:12px;font-family:monospace">`
+        ).join('')}
+      </div>
+    </div>`
+  }).join('')
+}
+
+function toggleAPI(key, enabled) {
+  document.querySelector('.api-fields-' + key).style.display = enabled ? 'block' : 'none'
+}
+
+function collectAPIs() {
+  const apis = {}
+  document.querySelectorAll('[data-api]').forEach(el => {
+    const key = el.dataset.api
+    const enabled = el.querySelector('input[type=checkbox]').checked
+    apis[key] = { enabled }
+    el.querySelectorAll('.api-field').forEach(inp => {
+      apis[key][inp.dataset.field] = inp.value
+    })
+  })
+  return apis
+}
+
+async function saveAPIs() {
+  const apis = collectAPIs()
+  const res = await api('/settings/social-apis', { method: 'POST', body: JSON.stringify(apis) })
+  if (res?.saved) showToast('APIs sauvegardées!')
+}
+
+async function resetAPIs() {
+  await api('/settings/social-apis/reset', { method: 'POST' })
+  showToast('APIs réinitialisées')
+  loadAPIs()
+}
+
+// ==================== AUTOMATIONS ====================
+async function loadAutomations() {
+  const container = $('tab-automations')
+  container.innerHTML = `
+    <div class="section">
+      <h2>⚡ Automations Marketing</h2>
+      <div class="flex" style="gap:16px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:350px">
+          <h3>📝 Générer du contenu multi-plateforme</h3>
+          <label>Sujet / Thème</label>
+          <input id="auto-topic" placeholder="Ex: World Cup 2026 IPTV, Ramadan offer, ...">
+          <label>Langue</label>
+          <select id="auto-lang"><option value="fr">Français</option><option value="ar">العربية</option><option value="en">English</option><option value="es">Español</option></select>
+          <label>Ton</label>
+          <select id="auto-tone"><option value="promotional">Promotionnel</option><option value="informative">Informatif</option><option value="urgent">Urgent</option><option value="friendly">Amical</option></select>
+          <label>Plateformes</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <label><input type="checkbox" id="plat-telegram" checked> Telegram</label>
+            <label><input type="checkbox" id="plat-reddit" checked> Reddit</label>
+            <label><input type="checkbox" id="plat-facebook"> Facebook</label>
+            <label><input type="checkbox" id="plat-twitter"> Twitter</label>
+            <label><input type="checkbox" id="plat-whatsapp"> WhatsApp</label>
+          </div>
+          <button class="btn" onclick="generateMarketingContent()" style="width:100%">🚀 Générer le contenu</button>
+          <div id="generate-result" style="margin-top:12px"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:350px">
+          <h3>💬 Auto-engagement (commentaires)</h3>
+          <label>Thème du commentaire</label>
+          <input id="engage-topic" placeholder="Sujet du commentaire">
+          <label>Reddit: ID du post (t3_xxxxx)</label>
+          <input id="engage-postid" placeholder="t3_abc123 (optionnel)">
+          <label>YouTube: ID de la vidéo</label>
+          <input id="engage-videoid" placeholder="dQw4w9WgXcQ (optionnel)">
+          <button class="btn" onclick="autoEngage()" style="width:100%">💬 Générer & Poster</button>
+          <div id="engage-result" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>🔎 Recherche & Inspiration</h3>
+        <div class="flex" style="gap:8px;flex-wrap:wrap;align-items:end">
+          <div style="flex:1"><label>Requête</label><input id="search-query" placeholder="Rechercher..."></div>
+          <div><label>Moteur</label><select id="search-engine"><option value="bing">Bing Web</option><option value="youtube">YouTube</option></select></div>
+          <div><button class="btn" onclick="doSearch()">🔍 Chercher</button></div>
+        </div>
+        <div id="search-result" style="margin-top:12px"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>📤 Publication directe</h3>
+        <div class="flex" style="gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <label>Plateforme</label>
+            <select id="pub-platform">
+              <option value="reddit_post">👽 Reddit — Nouveau post</option>
+              <option value="reddit_comment">👽 Reddit — Commentaire</option>
+              <option value="reddit_dm">👽 Reddit — Message privé</option>
+              <option value="facebook_post">📘 Facebook — Publication</option>
+              <option value="youtube_comment">▶️ YouTube — Commentaire</option>
+            </select>
+          </div>
+          <div style="flex:3">
+            <label>Paramètres (copiez depuis la sortie générée ci-dessus)</label>
+            <textarea id="pub-params" rows="3" placeholder='{"subreddit":"iptv","title":"Mon offre","text":"Contenu..."} ou {"videoId":"...","text":"..."}' style="font-family:monospace;font-size:12px"></textarea>
+          </div>
+        </div>
+        <button class="btn" onclick="directPublish()" style="margin-top:8px">📤 Publier maintenant</button>
+        <div id="publish-result" style="margin-top:8px"></div>
+      </div>
+    </div>
+  `
+}
+
+async function generateMarketingContent() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = '⏳ Génération...'
+  const resultDiv = $('generate-result')
+  resultDiv.innerHTML = ''
+
+  const platforms = []
+  if ($('plat-telegram').checked) platforms.push('telegram')
+  if ($('plat-reddit').checked) platforms.push('reddit')
+  if ($('plat-facebook').checked) platforms.push('facebook')
+  if ($('plat-twitter').checked) platforms.push('twitter')
+  if ($('plat-whatsapp').checked) platforms.push('whatsapp')
+
+  const res = await api('/automations/generate-marketing', {
+    method: 'POST',
+    body: JSON.stringify({
+      topic: $('auto-topic').value,
+      language: $('auto-lang').value,
+      tone: $('auto-tone').value,
+      platforms
+    })
+  })
+
+  btn.disabled = false
+  btn.textContent = '🚀 Générer le contenu'
+
+  if (!res || res.error) {
+    resultDiv.innerHTML = '<div class="alert alert-error">' + (res?.error || 'Erreur') + '</div>'
+    return
+  }
+
+  resultDiv.innerHTML = '<h3 style="color:#fff;margin-bottom:12px">✅ Contenu généré</h3>'
+  for (const [platform, content] of Object.entries(res.results)) {
+    const emoji = { telegram: '✈️', reddit: '👽', facebook: '📘', twitter: '🐦', whatsapp: '📞' }[platform] || '📝'
+    resultDiv.innerHTML += `<div class="card" style="margin-bottom:8px;padding:12px">
+      <div class="flex" style="justify-content:space-between">
+        <strong>${emoji} ${platform}</strong>
+        <button class="btn-sm btn-secondary" onclick="copyText(this)">📋 Copier</button>
+      </div>
+      <pre style="margin-top:8px;font-size:12px;color:#aaa;white-space:pre-wrap;font-family:inherit">${escHtml(content)}</pre>
+    </div>`
+  }
+}
+
+async function autoEngage() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = '⏳ Génération...'
+  const resultDiv = $('engage-result')
+
+  const res = await api('/automations/auto-engage', {
+    method: 'POST',
+    body: JSON.stringify({
+      topic: $('engage-topic').value,
+      subreddit: $('engage-postid').value || null,
+      videoId: $('engage-videoid').value || null
+    })
+  })
+
+  btn.disabled = false
+  btn.textContent = '💬 Générer & Poster'
+
+  if (!res || res.error) {
+    resultDiv.innerHTML = '<div class="alert alert-error">' + (res?.error || 'Erreur') + '</div>'
+    return
+  }
+
+  let html = `<div class="alert alert-success"><strong>Commentaire généré:</strong><br><pre style="margin-top:8px;font-size:12px;white-space:pre-wrap">${escHtml(res.comment)}</pre></div>`
+  if (res.actions) {
+    html += '<div style="margin-top:8px"><strong>Actions:</strong>'
+    res.actions.forEach(a => {
+      html += `<div style="font-size:12px;color:${a.status === 'posted' ? '#4caf50' : '#e94560'};margin-top:4px">${a.platform}: ${a.status === 'posted' ? '✅ Posté' : '❌ ' + a.error}</div>`
+    })
+    html += '</div>'
+  }
+  resultDiv.innerHTML = html
+}
+
+async function doSearch() {
+  const resultDiv = $('search-result')
+  resultDiv.innerHTML = '<p style="color:#666">Recherche...</p>'
+  const res = await api('/automations/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: $('search-query').value,
+      engine: $('search-engine').value
+    })
+  })
+  if (!res || res.error) { resultDiv.innerHTML = '<div class="alert alert-error">' + (res?.error || 'Erreur') + '</div>'; return }
+  if (res.results) {
+    resultDiv.innerHTML = res.results.map(r => `<div style="padding:8px 0;border-bottom:1px solid #1a1a1a"><a href="${r.url}" target="_blank" style="color:#4fc3f7;text-decoration:none;font-size:13px">${r.title}</a><p style="color:#666;font-size:11px;margin-top:2px">${r.snippet || ''}</p></div>`).join('')
+  } else if (res.videos) {
+    resultDiv.innerHTML = res.videos.map(v => `<div style="padding:8px 0;border-bottom:1px solid #1a1a1a"><strong style="color:#fff;font-size:13px">${v.title}</strong><p style="color:#666;font-size:11px">${v.channel} · ${v.id ? '<a href="https://youtube.com/watch?v='+v.id+'" target="_blank" style="color:#4fc3f7">Voir</a>' : ''}</p></div>`).join('')
+  }
+}
+
+async function directPublish() {
+  const platform = $('pub-platform').value
+  const resultDiv = $('publish-result')
+  let params
+  try { params = JSON.parse($('pub-params').value) } catch { resultDiv.innerHTML = '<div class="alert alert-error">JSON invalide dans les paramètres</div>'; return }
+
+  resultDiv.innerHTML = '<p style="color:#666">Publication...</p>'
+
+  let endpoint = ''
+  let body = params
+  const [service, action] = platform.split('_', 2)
+
+  if (service === 'reddit') endpoint = `/automations/reddit/${action}`
+  else if (service === 'facebook') endpoint = `/automations/facebook/${action}`
+  else if (service === 'youtube') endpoint = `/automations/youtube/${action}`
+
+  const res = await api(endpoint, { method: 'POST', body: JSON.stringify(body) })
+  resultDiv.innerHTML = res?.success ? '<div class="alert alert-success">✅ Publié avec succès!</div>' : '<div class="alert alert-error">' + (res?.error || 'Échec') + '</div>'
+}
+
+function escHtml(s) { if (!s) return ''; return s.replace(/[<>&"']/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'})[c]) }
+function copyText(btn) { const pre = btn.parentElement.nextElementSibling; if (pre) { navigator.clipboard.writeText(pre.textContent).then(() => showToast('Copié!')) } }
+
 </script>
 </body>
 </html>
