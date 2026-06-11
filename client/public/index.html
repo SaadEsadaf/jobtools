@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobTools — Marketing Lab</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d0d0d; color: #e0e0e0; }
+
+    .login-page { display: flex; align-items: center; justify-content: center; height: 100vh; }
+    .login-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 40px; width: 360px; }
+    .login-box h1 { font-size: 24px; margin-bottom: 8px; color: #fff; }
+    .login-box p { color: #888; margin-bottom: 24px; font-size: 14px; }
+    .login-box input { width: 100%; padding: 12px; margin-bottom: 12px; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 8px; color: #fff; font-size: 14px; }
+    .login-box button { width: 100%; padding: 12px; background: #e94560; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; }
+    .login-box button:hover { background: #c73652; }
+    .login-box .error { color: #e94560; font-size: 13px; margin-top: 8px; }
+
+    .app { display: none; }
+    .app.active { display: block; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #1a1a1a; border-bottom: 1px solid #2a2a2a; }
+    .topbar h1 { font-size: 18px; color: #fff; }
+    .topbar h1 span { color: #e94560; }
+    .topbar .subtitle { color: #666; font-size: 12px; margin-top: 2px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .topbar-right .user { color: #888; font-size: 13px; }
+    .topbar-right button { padding: 6px 14px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #ccc; cursor: pointer; font-size: 12px; }
+    .topbar-right button:hover { background: #3a3a3a; }
+
+    .nav-tabs { display: flex; gap: 0; background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 0 16px; }
+    .nav-tabs button { padding: 12px 20px; background: transparent; border: none; color: #666; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; transition: all .2s; }
+    .nav-tabs button:hover { color: #ccc; }
+    .nav-tabs button.active { color: #e94560; border-bottom-color: #e94560; }
+
+    .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 20px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .stat-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: .5px; }
+    .stat-card .sub { font-size: 11px; color: #555; margin-top: 8px; }
+
+    .section { margin-bottom: 32px; }
+    .section h2 { font-size: 16px; color: #fff; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #2a2a2a; }
+    .section h2 .badge { display: inline-block; background: #e94560; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table th { text-align: left; padding: 10px 12px; color: #888; font-weight: 500; border-bottom: 1px solid #2a2a2a; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+    table td { padding: 10px 12px; border-bottom: 1px solid #1a1a1a; }
+    table tr:hover td { background: #151515; }
+
+    .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filters select, .filters input { padding: 8px 12px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; color: #ccc; font-size: 13px; }
+    .filters input { min-width: 200px; }
+    .filters button, .btn { padding: 8px 16px; background: #e94560; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
+    .btn:hover { background: #c73652; }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
+    .btn-secondary { background: #2a2a2a; border: 1px solid #3a3a3a; color: #ccc; }
+    .btn-secondary:hover { background: #3a3a3a; }
+    .btn-success { background: #2e7d32; }
+    .btn-success:hover { background: #1b5e20; }
+    .btn-warning { background: #e65100; }
+    .btn-warning:hover { background: #bf360c; }
+
+    .badge-status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge-new { background: #1a237e; color: #7986cb; }
+    .badge-contacted { background: #1b5e20; color: #81c784; }
+    .badge-interested { background: #e65100; color: #ffb74d; }
+    .badge-unsubscribed { background: #b71c1c; color: #ef9a9a; }
+    .badge-pending { background: #3e2723; color: #bcaaa4; }
+    .badge-executed { background: #1b5e20; color: #81c784; }
+    .badge-delivered { background: #1b5e20; color: #81c784; }
+
+    .flex { display: flex; gap: 16px; flex-wrap: wrap; }
+    .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; margin-bottom: 12px; flex: 1; min-width: 280px; }
+    .card h3 { color: #fff; font-size: 14px; margin-bottom: 8px; }
+    .card p { color: #888; font-size: 13px; }
+    .card .meta { color: #555; font-size: 11px; margin-top: 8px; }
+
+    .breakdown-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+    .breakdown-item { display: flex; justify-content: space-between; padding: 8px 12px; background: #151515; border-radius: 6px; font-size: 13px; }
+    .breakdown-item .key { color: #ccc; }
+    .breakdown-item .val { color: #e94560; font-weight: 600; }
+
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.7); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 24px; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+    .modal h2 { color: #fff; font-size: 18px; margin-bottom: 16px; }
+    .modal label { display: block; color: #888; font-size: 12px; margin-bottom: 4px; }
+    .modal input, .modal select, .modal textarea { width: 100%; padding: 10px; margin-bottom: 12px; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 6px; color: #fff; font-size: 13px; }
+    .modal textarea { min-height: 100px; resize: vertical; font-family: inherit; }
+    .modal .btn-group { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+    .pagination { display: flex; gap: 4px; align-items: center; margin-top: 12px; font-size: 12px; }
+    .pagination button { padding: 4px 10px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px; color: #ccc; cursor: pointer; }
+    .pagination span { color: #666; }
+
+    .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+    .alert-success { background: #1b5e20; color: #a5d6a7; border: 1px solid #2e7d32; }
+    .alert-error { background: #b71c1c; color: #ef9a9a; border: 1px solid #c62828; }
+    .alert-info { background: #1a237e; color: #9fa8da; border: 1px solid #283593; }
+
+    .mono { font-family: monospace; font-size: 11px; color: #888; word-break: break-all; }
+    .ta-right { text-align: right; }
+
+    .inject-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .inject-actions button { padding: 4px 10px; font-size: 11px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; color: #ccc; cursor: pointer; }
+    .inject-actions button:hover { background: #3a3a3a; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 2000; animation: slideIn .3s ease; }
+    .toast-success { background: #1b5e20; color: #a5d6a7; border: 1px solid #2e7d32; }
+    .toast-error { background: #b71c1c; color: #ef9a9a; border: 1px solid #c62828; }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    @media (max-width: 600px) {
+      .nav-tabs { overflow-x: auto; }
+      .nav-tabs button { padding: 10px 14px; font-size: 12px; white-space: nowrap; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .filters { flex-direction: column; }
+      .filters input { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+<div class="login-page" id="loginPage">
+  <div class="login-box">
+    <h1>🔧 JobTools</h1>
+    <p>Marketing Lab — connexion sécurisée</p>
+    <input type="text" id="loginUser" placeholder="Nom d'utilisateur" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Mot de passe" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Se connecter</button>
+    <div class="error" id="loginError"></div>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <div class="topbar">
+    <div>
+      <h1>🔧 <span>JobTools</span> Marketing Lab</h1>
+      <div class="subtitle">Environnement marketing indépendant lié à IPTV-Boss</div>
+    </div>
+    <div class="topbar-right">
+      <span class="user" id="userDisplay"></span>
+      <button onclick="doLogout()">Déconnexion</button>
+    </div>
+  </div>
+
+  <div class="nav-tabs" id="navTabs">
+    <button class="active" data-tab="dashboard">📊 Tableau de bord</button>
+    <button data-tab="leads">👥 Leads</button>
+    <button data-tab="campaigns">📢 Campagnes</button>
+    <button data-tab="templates">📝 Templates</button>
+    <button data-tab="injection">⚡ Injection</button>
+    <button data-tab="queue">📦 File d'attente</button>
+    <button data-tab="brain">🧠 Pont IPTV-Boss</button>
+    <button data-tab="settings">⚙️ Paramètres</button>
+  </div>
+
+  <div class="content">
+    <div class="tab-content active" id="tab-dashboard"></div>
+    <div class="tab-content" id="tab-leads"></div>
+    <div class="tab-content" id="tab-campaigns"></div>
+    <div class="tab-content" id="tab-templates"></div>
+    <div class="tab-content" id="tab-injection"></div>
+    <div class="tab-content" id="tab-queue"></div>
+    <div class="tab-content" id="tab-brain"></div>
+    <div class="tab-content" id="tab-settings"></div>
+  </div>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem('jobtools_token') || ''
+let USER = JSON.parse(localStorage.getItem('jobtools_user') || 'null')
+
+const API = window.location.origin + '/api'
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...opts.headers }
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN
+  const res = await fetch(API + path, { ...opts, headers })
+  if (res.status === 401) { doLogout(); return null }
+  return res.json()
+}
+
+function showToast(msg, type = 'success') { const el = document.createElement('div'); el.className = 'toast toast-' + type; el.textContent = msg; document.body.appendChild(el); setTimeout(() => el.remove(), 3000) }
+function $(id) { return document.getElementById(id) }
+function el(tag, attrs = {}, ...children) { const e = document.createElement(tag); Object.entries(attrs).forEach(([k, v]) => { if (k.startsWith('on')) e.addEventListener(k.slice(2).toLowerCase(), v); else if (k === 'className') e.className = v; else e.setAttribute(k, v) }); children.forEach(c => { if (typeof c === 'string') e.appendChild(document.createTextNode(c)); else if (c) e.appendChild(c) }); return e }
+
+function statusBadge(s) { const colors = { new: 'badge-new', contacted: 'badge-contacted', interested: 'badge-interested', unsubscribed: 'badge-unsubscribed', pending: 'badge-pending', executed: 'badge-executed', delivered: 'badge-delivered' }; return el('span', { className: 'badge-status ' + (colors[s] || 'badge-new') }, s || 'unknown') }
+
+function doLogin() {
+  const username = $('loginUser').value
+  const password = $('loginPass').value
+  fetch(API + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) })
+    .then(r => r.json())
+    .then(d => {
+      if (d.token) { TOKEN = d.token; USER = d.user; localStorage.setItem('jobtools_token', TOKEN); localStorage.setItem('jobtools_user', JSON.stringify(USER)); $('loginPage').style.display = 'none'; $('app').classList.add('active'); initApp() }
+      else { $('loginError').textContent = d.error || 'Échec de connexion' }
+    })
+    .catch(e => { $('loginError').textContent = 'Erreur de connexion: ' + e.message })
+}
+
+function doLogout() { TOKEN = ''; USER = null; localStorage.removeItem('jobtools_token'); localStorage.removeItem('jobtools_user'); $('loginPage').style.display = 'flex'; $('app').classList.remove('active') }
+
+if (TOKEN && USER) { $('loginPage').style.display = 'none'; $('app').classList.add('active'); initApp() }
+
+function initApp() {
+  $('userDisplay').textContent = USER?.username || 'admin'
+  document.querySelectorAll('#navTabs button').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#navTabs button').forEach(b => b.classList.remove('active'))
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'))
+      btn.classList.add('active')
+      $('tab-' + btn.dataset.tab).classList.add('active')
+      loadTab(btn.dataset.tab)
+    }
+  })
+  loadTab('dashboard')
+}
+
+function loadTab(name) {
+  if (name === 'dashboard') loadDashboard()
+  else if (name === 'leads') loadLeads()
+  else if (name === 'campaigns') loadCampaigns()
+  else if (name === 'templates') loadTemplates()
+  else if (name === 'injection') loadInjection()
+  else if (name === 'queue') loadQueue()
+  else if (name === 'brain') loadBrain()
+  else if (name === 'settings') loadSettings()
+}
+
+// ==================== DASHBOARD ====================
+async function loadDashboard() {
+  const data = await api('/stats')
+  if (!data) return
+  const { stats, breakdowns, recentInjectionLog, recentQueue, brainStatus, recentLeads } = data
+  const container = $('tab-dashboard')
+
+  container.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="value">${stats.totalLeads}</div><div class="label">👥 Total Leads</div><div class="sub">${stats.leadsWithEmail} avec email · ${stats.leadsWithPhone} avec téléphone</div></div>
+      <div class="stat-card"><div class="value">${stats.highIntent}</div><div class="label">🔥 Haute intention</div><div class="sub">Score ≥ 7</div></div>
+      <div class="stat-card"><div class="value">${stats.totalCampaigns}</div><div class="label">📢 Campagnes</div><div class="sub">${stats.executedCampaigns} exécutées</div></div>
+      <div class="stat-card"><div class="value">${stats.pendingQueue}</div><div class="label">📦 En attente</div><div class="sub">Contenu à poster</div></div>
+      <div class="stat-card"><div class="value">${stats.injections}</div><div class="label">⚡ Injections</div><div class="sub">Templates injectés</div></div>
+      <div class="stat-card"><div class="value">${stats.brainDelivered}</div><div class="label">🧠 Pont IPTV-Boss</div><div class="sub">Notifications envoyées</div></div>
+    </div>
+
+    <div class="flex">
+      <div class="card">
+        <h3>🔀 Sources des leads</h3>
+        ${breakdowns.sourceBreakdown.map(s => `<div class="breakdown-item"><span class="key">${s.source || 'inconnu'}</span><span class="val">${s.count}</span></div>`).join('')}
+      </div>
+      <div class="card">
+        <h3>🌐 Langues</h3>
+        ${breakdowns.langBreakdown.map(s => `<div class="breakdown-item"><span class="key">${s.language || 'inconnu'}</span><span class="val">${s.count}</span></div>`).join('')}
+      </div>
+      <div class="card">
+        <h3>🎯 Intentions</h3>
+        ${breakdowns.intentBreakdown.map(s => `<div class="breakdown-item"><span class="key">${s.intent_label || 'non classé'}</span><span class="val">${s.count}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>🕐 Dernières injections</h2>
+      ${recentInjectionLog.length ? `<table><tr><th>Type</th><th>Cible</th><th>Statut</th><th>Date</th></tr>${recentInjectionLog.map(l => `<tr><td>${l.injection_type}</td><td>${l.target}</td><td>${statusBadge(l.status)}</td><td>${new Date(l.created_at).toLocaleString()}</td></tr>`).join('')}</table>` : '<p style="color:#555">Aucune injection pour le moment</p>'}
+    </div>
+
+    <div class="section">
+      <h2>🧠 Pont IPTV-Boss — Derniers événements</h2>
+      ${brainStatus.length ? `<table><tr><th>Événement</th><th>Statut</th><th>Date</th></tr>${brainStatus.map(b => `<tr><td>${b.event_type}</td><td>${statusBadge(b.status)}</td><td>${new Date(b.created_at).toLocaleString()}</td></tr>`).join('')}</table>` : '<p style="color:#555">Aucun événement</p>'}
+    </div>
+  `
+}
+
+// ==================== LEADS ====================
+async function loadLeads(page = 1) {
+  const sourcesSelect = $('leads-sources')
+  const langsSelect = $('leads-langs')
+  const intentsSelect = $('leads-intents')
+
+  const params = new URLSearchParams({ page, limit: 50 })
+  if (sourcesSelect?.value) params.set('source', sourcesSelect.value)
+  if (langsSelect?.value) params.set('language', langsSelect.value)
+  if (intentsSelect?.value) params.set('intent', intentsSelect.value)
+  if ($('leads-search')?.value) params.set('search', $('leads-search').value)
+
+  const data = await api('/leads?' + params.toString())
+  if (!data) return
+
+  const container = $('tab-leads')
+  container.innerHTML = `
+    <div class="section">
+      <h2>👥 Leads <span class="badge">${data.total}</span></h2>
+      <div class="filters">
+        <select id="leads-sources"><option value="">Toutes sources</option>${data.sources.map(s => '<option value="'+s+'">'+s+'</option>').join('')}</select>
+        <select id="leads-langs"><option value="">Toutes langues</option>${data.languages.map(s => '<option value="'+s+'">'+s+'</option>').join('')}</select>
+        <select id="leads-intents"><option value="">Toutes intentions</option>${data.intents.map(s => '<option value="'+s+'">'+s+'</option>').join('')}</select>
+        <input id="leads-search" placeholder="🔍 Rechercher..." onkeydown="if(event.key==='Enter')loadLeads()">
+        <button onclick="loadLeads()">Filtrer</button>
+        <button class="btn-secondary" onclick="importFromIPTV()">📥 Importer d'IPTV-Boss</button>
+      </div>
+      <table>
+        <tr><th>ID</th><th>Source</th><th>Langue</th><th>Utilisateur</th><th>Téléphone</th><th>Email</th><th>Intention</th><th>Score</th><th>Statut</th><th>Date</th></tr>
+        ${data.leads.map(l => `<tr><td>${l.id}</td><td>${l.source || '-'}</td><td>${l.language || '-'}</td><td>${l.username || l.first_name || '-'}</td><td>${l.phone || '-'}</td><td>${l.email || '-'}</td><td>${l.intent_label || '-'}</td><td>${l.intent_score}</td><td>${statusBadge(l.status)}</td><td>${new Date(l.created_at).toLocaleDateString()}</td></tr>`).join('')}
+      </table>
+      <div class="pagination">
+        <button onclick="loadLeads(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>← Précédent</button>
+        <span>Page ${data.page} / ${Math.ceil(data.total / data.limit)}</span>
+        <button onclick="loadLeads(${data.page + 1})" ${data.page * data.limit >= data.total ? 'disabled' : ''}>Suivant →</button>
+      </div>
+    </div>
+  `
+
+  if (sourcesSelect) sourcesSelect.onchange = () => loadLeads()
+  if (langsSelect) langsSelect.onchange = () => loadLeads()
+  if (intentsSelect) intentsSelect.onchange = () => loadLeads()
+}
+
+async function importFromIPTV() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = 'Importation...'
+  const res = await api('/leads/import-from-iptv', { method: 'POST' })
+  if (res) showToast(`${res.imported} leads importés depuis IPTV-Boss`, 'success')
+  else showToast('Échec de l\'import', 'error')
+  btn.disabled = false
+  btn.textContent = '📥 Importer d\'IPTV-Boss'
+  loadLeads()
+}
+
+// ==================== CAMPAIGNS ====================
+async function loadCampaigns() {
+  const campaigns = await api('/campaigns')
+  const templates = await api('/templates')
+  if (!campaigns) return
+  const container = $('tab-campaigns')
+  container.innerHTML = `
+    <div class="flex">
+      <div class="card" style="flex:0 0 300px">
+        <h3>📢 Nouvelle campagne</h3>
+        <label>Nom</label><input id="camp-name" placeholder="Ex: World Cup 2026">
+        <label>Description</label><textarea id="camp-desc" rows="2"></textarea>
+        <label>Template</label><select id="camp-template"><option value="">Sans template</option>${(templates||[]).map(t => '<option value="'+t.id+'">'+t.name+'</option>').join('')}</select>
+        <label>Type</label><select id="camp-type"><option value="email">Email</option><option value="social">Social</option><option value="mixed">Mixte</option></select>
+        <label>Cible (source)</label><input id="camp-source" placeholder="telegram, reddit, ...">
+        <label>Langue cible</label><input id="camp-lang" placeholder="fr, ar, es, ...">
+        <button class="btn" onclick="createCampaign()" style="width:100%;margin-top:8px">Créer la campagne</button>
+      </div>
+      <div class="card" style="flex:1">
+        <h3>Campagnes existantes</h3>
+        <table>
+          <tr><th>ID</th><th>Nom</th><th>Type</th><th>Statut</th><th>Template</th><th>Exécutée</th><th>🧠 Brain</th><th>Action</th></tr>
+          ${campaigns.map(c => `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.type || '-'}</td><td>${statusBadge(c.status)}</td><td>${c.template_id || '-'}</td><td>${c.executed_at ? new Date(c.executed_at).toLocaleString() : '-'}</td><td>${c.notified_to_brain ? '✅' : '❌'}</td><td>${c.status === 'draft' ? `<button class="btn-sm" onclick="executeCampaign(${c.id})">▶️ Exécuter</button>` : '-'}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>
+  `
+}
+
+async function createCampaign() {
+  const body = { name: $('camp-name').value, description: $('camp-desc').value, type: $('camp-type').value, template_id: parseInt($('camp-template').value) || null, target_source: $('camp-source').value || null, target_language: $('camp-lang').value || null }
+  if (!body.name) return showToast('Nom requis', 'error')
+  const res = await api('/campaigns', { method: 'POST', body: JSON.stringify(body) })
+  if (res?.id) { showToast('Campagne créée!'); loadCampaigns() }
+}
+
+async function executeCampaign(id) {
+  const res = await api('/campaigns/execute/' + id, { method: 'POST', body: JSON.stringify({ injectionTypes: ['email_sequence', 'social_post', 'whatsapp_message'] }) })
+  if (res) { showToast('Campagne exécutée!'); loadCampaigns() }
+}
+
+// ==================== TEMPLATES ====================
+async function loadTemplates() {
+  const templates = await api('/templates')
+  if (!templates) return
+  const container = $('tab-templates')
+  container.innerHTML = `
+    <div class="flex">
+      <div class="card" style="flex:0 0 300px">
+        <h3>📝 Nouveau template</h3>
+        <label>Nom</label><input id="tpl-name" placeholder="Ex: Offre Ramadan">
+        <label>Type</label><select id="tpl-type"><option value="promo">Promo</option><option value="info">Info</option><option value="offer">Offre</option><option value="reminder">Rappel</option></select>
+        <label>Contenu</label><textarea id="tpl-content" rows="5" placeholder="Texte du template..."></textarea>
+        <label>Meta (JSON)</label><textarea id="tpl-meta" rows="2" placeholder='{"tone":"urgent","price":"19.99"}'></textarea>
+        <button class="btn" onclick="createTemplate()" style="width:100%">Créer le template</button>
+      </div>
+      <div class="card" style="flex:1">
+        <h3>Templates existants</h3>
+        ${templates.map(t => `<div class="card" style="margin-bottom:8px"><div class="flex" style="justify-content:space-between"><div><h3 style="margin:0">${t.name}</h3><p style="font-size:12px">${t.type} · v${t.version} · ${t.is_active ? '✅ Actif' : '💤 Inactif'}</p><p style="font-size:12px;color:#666">${(t.content||'').substring(0,100)}</p></div><div><button class="btn-sm" onclick="injectTemplate(${t.id})">⚡ Injecter</button></div></div></div>`).join('')}
+      </div>
+    </div>
+  `
+}
+
+async function createTemplate() {
+  const body = { name: $('tpl-name').value, type: $('tpl-type').value, content: $('tpl-content').value, meta: $('tpl-meta').value || null }
+  if (!body.name) return showToast('Nom requis', 'error')
+  const res = await api('/templates', { method: 'POST', body: JSON.stringify(body) })
+  if (res?.id) { showToast('Template créé!'); loadTemplates() }
+}
+
+async function injectTemplate(id) {
+  const target = prompt('Cible (landing_page, email_sequence, social_post, whatsapp_message, ad_copy, chat_response):', 'landing_page')
+  if (!target) return
+  const res = await api('/templates/inject/' + id, { method: 'POST', body: JSON.stringify({ target }) })
+  if (res) { showToast('Injection réussie!'); loadInjection() }
+}
+
+// ==================== INJECTION ====================
+async function loadInjection() {
+  const templates = await api('/templates')
+  const log = await api('/templates/log')
+  if (!templates) return
+  const container = $('tab-injection')
+  container.innerHTML = `
+    <div class="section">
+      <h2>⚡ Injection rapide</h2>
+      <div class="card">
+        <div class="flex" style="align-items:end;flex-wrap:wrap">
+          <div><label>Template</label><select id="inj-template">${(templates||[]).map(t => '<option value="'+t.id+'">'+t.name+' ('+t.type+')</option>').join('')}</select></div>
+          <div><label>Cible</label><select id="inj-target"><option value="landing_page">🌐 Landing Page</option><option value="email_sequence">📧 Email</option><option value="social_post">📱 Social</option><option value="whatsapp_message">📞 WhatsApp</option><option value="ad_copy">📢 Ad Copy</option><option value="chat_response">💬 Chat</option></select></div>
+          <div><button class="btn" onclick="doInject()">⚡ Injecter maintenant</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <h2>📜 Journal d'injection</h2>
+      ${log?.length ? `<table><tr><th>ID</th><th>Template</th><th>Type</th><th>Cible</th><th>Statut</th><th>Date</th></tr>${log.map(l => `<tr><td>${l.id}</td><td>${l.template_id}</td><td>${l.injection_type}</td><td>${l.target || '-'}</td><td>${statusBadge(l.status)}</td><td>${new Date(l.created_at).toLocaleString()}</td></tr>`).join('')}</table>` : '<p style="color:#555">Aucune injection</p>'}
+    </div>
+  `
+}
+
+async function doInject() {
+  const tplId = $('inj-template').value
+  const target = $('inj-target').value
+  if (!tplId) return showToast('Choisissez un template', 'error')
+  const res = await api('/templates/inject/' + tplId, { method: 'POST', body: JSON.stringify({ target }) })
+  if (res) { showToast('⚡ Injection réussie!'); loadInjection() }
+}
+
+// ==================== QUEUE ====================
+async function loadQueue() {
+  const queue = await api('/templates/queue')
+  if (!queue) return
+  const container = $('tab-queue')
+  container.innerHTML = `
+    <div class="section">
+      <h2>📦 File d'attente — Contenu à poster <span class="badge">${queue.length}</span></h2>
+      ${queue.length ? `<table><tr><th>ID</th><th>Type</th><th>Plateforme</th><th>Contenu</th><th>Date</th><th>Action</th></tr>${queue.map(q => `<tr><td>${q.id}</td><td>${q.type}</td><td>${q.platform}</td><td class="mono" style="max-width:300px;overflow:hidden">${(q.content||'').substring(0,80)}</td><td>${new Date(q.created_at).toLocaleString()}</td><td><button class="btn-sm btn-success" onclick="markPosted(${q.id})">✓ Posté</button> <button class="btn-sm btn-secondary" onclick="copyContent(${q.id})">📋 Copier</button></td></tr>`).join('')}</table>` : '<p style="color:#555">Rien en attente</p>'}
+    </div>
+  `
+}
+
+async function markPosted(id) {
+  await api('/templates/queue/' + id + '/post', { method: 'POST' })
+  showToast('Marqué comme posté ✓')
+  loadQueue()
+}
+
+function copyContent(id) {
+  const row = document.querySelector(`#tab-queue td.mono`)
+  if (row) { navigator.clipboard.writeText(row.textContent).then(() => showToast('Copié!')) }
+}
+
+// ==================== BRAIN ====================
+async function loadBrain() {
+  const status = await api('/brain/status')
+  const settings = await api('/brain/settings')
+  if (!status) return
+  const container = $('tab-brain')
+  container.innerHTML = `
+    <div class="section">
+      <h2>🧠 Pont IPTV-Boss</h2>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="value" style="color:#4caf50">${status.connected ? '✅ Connecté' : '❌ Déconnecté'}</div><div class="label">Statut du pont</div></div>
+        <div class="stat-card"><div class="value">${status.lastEvents?.length || 0}</div><div class="label">Événements récents</div></div>
+      </div>
+      <div class="card">
+        <h3>Configuration IPTV-Boss</h3>
+        <label>URL IPTV-Boss</label><input id="brain-url" value="${settings?.iptv_boss_url || 'http://localhost:3001'}">
+        <label>Token IPTV-Boss (si requis)</label><input id="brain-token" value="${settings?.iptv_boss_token || ''}">
+        <label>Domaine du site</label><input id="brain-domain" value="${settings?.site_domain || 'dalletek.live'}">
+        <div class="flex" style="margin-top:8px">
+          <button class="btn" onclick="saveBrainSettings()">💾 Sauvegarder</button>
+          <button class="btn btn-secondary" onclick="syncBrain()">🔄 Sync maintenant</button>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <h2>Derniers événements</h2>
+      ${status.lastEvents?.length ? `<table><tr><th>ID</th><th>Événement</th><th>Statut</th><th>Réponse</th><th>Date</th></tr>${status.lastEvents.map(e => `<tr><td>${e.id}</td><td>${e.event_type}</td><td>${statusBadge(e.status)}</td><td class="mono">${(e.response||'').substring(0,60)}</td><td>${new Date(e.created_at).toLocaleString()}</td></tr>`).join('')}</table>` : '<p style="color:#555">Aucun événement</p>'}
+    </div>
+  `
+}
+
+async function saveBrainSettings() {
+  const body = { iptv_boss_url: $('brain-url').value, iptv_boss_token: $('brain-token').value, site_domain: $('brain-domain').value }
+  const res = await api('/brain/settings', { method: 'PUT', body: JSON.stringify(body) })
+  if (res?.saved) showToast('Paramètres sauvegardés!')
+}
+
+async function syncBrain() {
+  const res = await api('/brain/sync', { method: 'POST' })
+  if (res?.synced) showToast('Synchronisé avec IPTV-Boss!')
+  loadBrain()
+}
+
+// ==================== SETTINGS ====================
+function loadSettings() {
+  const container = $('tab-settings')
+  container.innerHTML = `
+    <div class="section">
+      <h2>⚙️ Paramètres JobTools</h2>
+      <div class="card" style="max-width:500px">
+        <h3>Environnement</h3>
+        <p style="color:#666;margin-bottom:12px">JobTools Marketing Lab v1.0 — Serveur indépendant lié à IPTV-Boss</p>
+        <div class="breakdown-item"><span class="key">Port</span><span class="val">3002</span></div>
+        <div class="breakdown-item"><span class="key">Base de données</span><span class="val">jobtools.db (SQLite)</span></div>
+        <div class="breakdown-item"><span class="key">Domaine</span><span class="val">lab.jobtool.shop</span></div>
+      </div>
+    </div>
+  `
+}
+</script>
+</body>
+</html>
