@@ -43,12 +43,23 @@ startScheduler(60000)
 // Initialize sniffer sources
 const { seedDefaults: seedTelegram } = require('./services/telegramSniffer')
 const { seedDefaults: seedTwitter } = require('./services/twitterSniffer')
+const { seedDefaults: seedReddit } = require('./services/redditSniffer')
+const ytSnifferInit = require('./services/youtubeSniffer')
+const webSnifferInit = require('./services/webSniffer')
+const seedYoutube = ytSnifferInit.seedDefaults
+const seedWeb = webSnifferInit.seedDefaults
 seedTelegram()
 seedTwitter()
+seedReddit()
+seedYoutube()
+seedWeb()
 
 // Start sniffer cron jobs
 const { sniffTelegram } = require('./services/telegramSniffer')
 const { sniffTwitter } = require('./services/twitterSniffer')
+const { sniffReddit } = require('./services/redditSniffer')
+const sniffYoutube = ytSnifferInit.sniffYoutube
+const sniffWeb = webSnifferInit.sniffWeb
 const { enrichStaleLeads } = require('./services/leadEnrichment')
 const { notifyIptvBoss } = require('./services/brainBridge')
 
@@ -56,6 +67,9 @@ async function runSniffers() {
   let total = 0
   try { total += await sniffTelegram() } catch (e) { console.error('Telegram sniffer cron:', e.message) }
   try { total += await sniffTwitter() } catch (e) { console.error('Twitter sniffer cron:', e.message) }
+  try { total += await sniffReddit() } catch (e) { console.error('Reddit sniffer cron:', e.message) }
+  try { total += await sniffYoutube() } catch (e) { console.error('YouTube sniffer cron:', e.message) }
+  try { total += await sniffWeb() } catch (e) { console.error('Web sniffer cron:', e.message) }
   if (total > 0) {
     try {
       await notifyIptvBoss('leads_sync', {
