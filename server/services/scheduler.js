@@ -23,7 +23,9 @@ async function checkAndPost() {
   telegramRunCount++
   try {
     const botToken = (db.prepare("SELECT value FROM app_settings WHERE key = 'telegram_bot_token'").get() || {}).value
-    if (botToken) {
+    // Skip if token looks like OpenAI key (sk-...) or is invalid format
+    const isValidTelegramToken = botToken && /^\d+:[\w-]+$/.test(botToken)
+    if (isValidTelegramToken) {
       const { findAndReply, runGroupCampaign } = require('./telegramAgent')
 
       // Reply to questions every 1 minute

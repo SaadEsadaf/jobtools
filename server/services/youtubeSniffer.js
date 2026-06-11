@@ -30,6 +30,46 @@ function detectLanguage(text) {
   return 'en'
 }
 
+function getApiKey() {
+  const db = getDb()
+  const raw = db.prepare("SELECT value FROM app_settings WHERE key = 'social_apis'").get()
+  if (!raw) return null
+  try {
+    const apis = JSON.parse(raw.value)
+    return apis.youtube?.apiKey || null
+  } catch { return null }
+}
+
+async function searchYoutubeAPI(query, apiKey) {
+  const results = []
+  try {
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=15&key=${apiKey}`
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!res.ok) return results
+    const data = await res.json()
+    if (data.error) return results
+    for (const item of data.items || []) {
+      const snippet = item.snippet || {}
+      const text = ((snippet.title || '') + ' ' + (snippet.description || '')).trim()
+      if (text.length < 15) continue
+      results.push({
+        source: 'youtube',
+        source_name: 'youtube_api',
+        author: snippet.channelTitle || '',
+        content: text.substring(0, 2000),
+        email: extractEmail(text),
+        language: detectLanguage(text),
+        title: snippet.title,
+        intent_score: 50,
+        source_url: `https://youtube.com/watch?v=${item.id?.videoId || ''}`,
+        video_id: item.id?.videoId,
+        created_at: snippet.publishedAt || new Date().toISOString()
+      })
+    }
+  } catch (e) { /* silent */ }
+  return results
+}
+
 async function searchInvidious(query, instance) {
   const results = []
   try {
@@ -67,23 +107,29 @@ async function searchInvidious(query, instance) {
 async function sniffYoutube() {
   const db = getDb()
   let totalLeads = 0
-  let instanceIndex = 0
   const terms = SEARCH_TERMS.slice(0, 8)
+  const apiKey = getApiKey()
+
   for (const term of terms) {
-    const instance = INVIDIOUS_INSTANCES[instanceIndex % INVIDIOUS_INSTANCES.length]
-    instanceIndex++
-    const leads = await searchInvidious(term, instance)
+    let leads = []
+    if (apiKey) {
+      leads = await searchYoutubeAPI(term, apiKey)
+    }
+    if (leads.length === 0) {
+      const instance = INVIDIOUS_INSTANCES[Math.floor(Math.random() * INVIDIOUS_INSTANCES.length)]
+      leads = await searchInvidious(term, instance)
+    }
     for (const lead of leads) {
       try {
         const existing = db.prepare("SELECT id FROM leads WHERE source_url = ?").get(lead.source_url)
         if (existing) continue
         db.prepare(`
-          INSERT INTO leads (source, source_name, username, content, email, intent_score, language, raw_data, imported_from, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'youtube_sniffer', ?, ?)
+          INSERT INTO leads (source, username, content, email, intent_score, language, raw_data, imported_from, source_url, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'youtube_sniffer', ?, ?, ?)
         `).run(
-          'youtube', lead.source_name, lead.author, lead.content,
+          'youtube', lead.author, lead.content,
           lead.email, lead.intent_score, lead.language,
-          JSON.stringify(lead), lead.created_at, lead.created_at
+          JSON.stringify(lead), lead.source_url, lead.created_at, lead.created_at
         )
         totalLeads++
       } catch (e) { /* skip */ }

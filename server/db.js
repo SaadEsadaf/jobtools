@@ -25,6 +25,8 @@ function migrate() {
   try { db.exec("ALTER TABLE leads ADD COLUMN opportunity TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE leads ADD COLUMN source_url TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE leads ADD COLUMN platform TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN source_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN phone TEXT"); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
