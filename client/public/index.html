@@ -74,6 +74,11 @@
     .badge-executed { background: #1b5e20; color: #81c784; }
     .badge-delivered { background: #1b5e20; color: #81c784; }
 
+    .setting-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
+    .setting-row label { min-width: 180px; color: #aaa; font-size: 12px; }
+    .s-field { flex: 1; padding: 8px 10px; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 6px; color: #fff; font-size: 12px; font-family: monospace; }
+    .s-field:focus { border-color: #e94560; outline: none; }
+    .s-check { width: 18px; height: 18px; cursor: pointer; accent-color: #e94560; }
     .flex { display: flex; gap: 16px; flex-wrap: wrap; }
     .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; margin-bottom: 12px; flex: 1; min-width: 280px; }
     .card h3 { color: #fff; font-size: 14px; margin-bottom: 8px; }
@@ -568,13 +573,74 @@ async function syncBrain() {
 }
 
 // ==================== SETTINGS ====================
-function loadSettings() {
+async function loadSettings() {
   const container = $('tab-settings')
+  const settings = await api('/settings/app') || {}
   container.innerHTML = `
     <div class="section">
       <h2>⚙️ Paramètres JobTools</h2>
-      <div class="card" style="max-width:500px">
-        <h3>Environnement</h3>
+      <div class="alert alert-info">Configurez vos tokens API et préférences marketing. L'agent Telegram a besoin du bot token pour fonctionner.</div>
+      <div class="card" style="max-width:700px">
+        <h3>🤖 Agent Telegram</h3>
+        <div class="setting-row"><label>Token du bot Telegram</label><input class="s-field" data-key="telegram_bot_token" value="${esc(settings.telegram_bot_token || '')}" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"></div>
+        <div class="setting-row"><label>Chat ID notifications</label><input class="s-field" data-key="telegram_chat_id" value="${esc(settings.telegram_chat_id || '')}" placeholder="Optionnel — ID du chat pour recevoir les alertes"></div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>📧 Notifications & Alertes</h3>
+        <div class="setting-row"><label>Email admin</label><input class="s-field" data-key="admin_email" value="${esc(settings.admin_email || 'babilon26@gmail.com')}"></div>
+        <div class="setting-row"><label>Téléphone (WhatsApp)</label><input class="s-field" data-key="admin_phone" value="${esc(settings.admin_phone || '')}" placeholder="+33612345678"></div>
+        <div class="setting-row" style="display:flex;align-items:center;gap:8px;padding:8px 0">
+          <label style="margin:0">Activer les notifications email</label>
+          <input type="checkbox" class="s-check" data-key="notification_enabled" ${settings.notification_enabled !== '0' ? 'checked' : ''}>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>🕵️ Lead Outreach</h3>
+        <div class="setting-row" style="display:flex;align-items:center;gap:8px;padding:8px 0">
+          <label style="margin:0">Activer le lead outreach automatique</label>
+          <input type="checkbox" class="s-check" data-key="lead_outreach_enabled" ${settings.lead_outreach_enabled !== '0' ? 'checked' : ''}>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>🏆 Event Marketing</h3>
+        <div class="setting-row" style="display:flex;align-items:center;gap:8px;padding:8px 0">
+          <label style="margin:0">Activer les campagnes événementielles</label>
+          <input type="checkbox" class="s-check" data-key="event_marketing_enabled" ${settings.event_marketing_enabled !== '0' ? 'checked' : ''}>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>📊 Business Report</h3>
+        <div class="setting-row" style="display:flex;align-items:center;gap:8px;padding:8px 0">
+          <label style="margin:0">Activer le rapport automatique (toutes les 2h)</label>
+          <input type="checkbox" class="s-check" data-key="business_report_enabled" ${settings.business_report_enabled !== '0' ? 'checked' : ''}>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>❤️ Health Monitor</h3>
+        <div class="setting-row" style="display:flex;align-items:center;gap:8px;padding:8px 0">
+          <label style="margin:0">Activer le health monitor + auto-healing</label>
+          <input type="checkbox" class="s-check" data-key="health_monitor_enabled" ${settings.health_monitor_enabled !== '0' ? 'checked' : ''}>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>🛒 Cart Recovery</h3>
+        <div class="setting-row" style="display:flex;align-items:center;gap:8px;padding:8px 0">
+          <label style="margin:0">Activer la relance panier abandonné</label>
+          <input type="checkbox" class="s-check" data-key="cart_recovery_enabled" ${settings.cart_recovery_enabled !== '0' ? 'checked' : ''}>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>📧 Configuration SMTP (pour les emails marketing)</h3>
+        <div class="setting-row"><label>Hôte SMTP</label><input class="s-field" data-key="smtp_host" value="${esc(settings.smtp_host || '')}" placeholder="smtp-relay.brevo.com"></div>
+        <div class="setting-row"><label>Port</label><input class="s-field" data-key="smtp_port" value="${esc(settings.smtp_port || '587')}" placeholder="587"></div>
+        <div class="setting-row"><label>Utilisateur</label><input class="s-field" data-key="smtp_user" value="${esc(settings.smtp_user || '')}"></div>
+        <div class="setting-row"><label>Mot de passe</label><input class="s-field" data-key="smtp_pass" value="${esc(settings.smtp_pass || '')}" type="password" placeholder="********"></div>
+        <div class="setting-row"><label>Nom d'expéditeur</label><input class="s-field" data-key="smtp_from_name" value="${esc(settings.smtp_from_name || 'Dalletek')}"></div>
+        <div class="setting-row"><label>Email d'expéditeur</label><input class="s-field" data-key="smtp_from_email" value="${esc(settings.smtp_from_email || '')}" placeholder="noreply@dalletek.live"></div>
+      </div>
+      <button class="btn" onclick="saveAppSettings()" style="margin-top:16px">💾 Sauvegarder tous les paramètres</button>
+      <div class="card" style="max-width:700px;margin-top:24px">
+        <h3>ℹ️ Environnement</h3>
         <p style="color:#666;margin-bottom:12px">JobTools Marketing Lab v1.0 — Serveur indépendant lié à IPTV-Boss</p>
         <div class="breakdown-item"><span class="key">Port</span><span class="val">3002</span></div>
         <div class="breakdown-item"><span class="key">Base de données</span><span class="val">jobtools.db (SQLite)</span></div>
@@ -582,6 +648,16 @@ function loadSettings() {
       </div>
     </div>
   `
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+async function saveAppSettings() {
+  const fields = document.querySelectorAll('.s-field')
+  const checks = document.querySelectorAll('.s-check')
+  const body = {}
+  fields.forEach(f => body[f.dataset.key] = f.value)
+  checks.forEach(c => body[c.dataset.key] = c.checked ? '1' : '0')
+  const res = await api('/settings/app', { method: 'PUT', body: JSON.stringify(body) })
+  if (res?.saved) showToast('Paramètres sauvegardés!')
 }
 
 // ==================== AI PROVIDERS ====================
