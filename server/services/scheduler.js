@@ -13,9 +13,34 @@ function stopScheduler() {
   if (interval) { clearInterval(interval); interval = null }
 }
 
+let telegramRunCount = 0
+
 async function checkAndPost() {
   const db = getDb()
   const now = new Date().toISOString()
+
+  // Run Telegram agent periodically
+  telegramRunCount++
+  try {
+    const botToken = (db.prepare("SELECT value FROM app_settings WHERE key = 'telegram_bot_token'").get() || {}).value
+    if (botToken) {
+      const { findAndReply, runGroupCampaign } = require('./telegramAgent')
+
+      // Reply to questions every 1 minute
+      const replies = await findAndReply(botToken)
+      if (replies.replies > 0) console.log(`[Telegram] ${replies.replies} replies sent`)
+
+      // Post offers to groups every 60 runs (~1 hour at 60s interval)
+      if (telegramRunCount % 60 === 0) {
+        const campaign = await runGroupCampaign(botToken)
+        if (campaign.posted > 0) console.log(`[Telegram] ${campaign.posted} group posts sent`)
+      }
+    }
+  } catch (e) {
+    console.error('[Telegram] Agent error:', e.message)
+  }
+
+  // Original scheduled post logic
   const due = db.prepare(`
     SELECT * FROM scheduled_posts
     WHERE status = 'pending' AND scheduled_at <= ?
