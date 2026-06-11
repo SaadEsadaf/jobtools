@@ -166,6 +166,7 @@
     <button data-tab="apis">🔌 APIs Sociales</button>
     <button data-tab="automations">⚡ Automations</button>
     <button data-tab="thesis">🎓 Thesis Demo</button>
+    <button data-tab="whois">🌐 WHOIS</button>
     <button data-tab="settings">⚙️ Paramètres</button>
   </div>
 
@@ -182,6 +183,7 @@
     <div class="tab-content" id="tab-apis"></div>
     <div class="tab-content" id="tab-automations"></div>
     <div class="tab-content" id="tab-thesis"></div>
+    <div class="tab-content" id="tab-whois"></div>
     <div class="tab-content" id="tab-settings"></div>
   </div>
 </div>
@@ -249,6 +251,7 @@ function loadTab(name) {
   else if (name === 'apis') loadAPIs()
   else if (name === 'automations') loadAutomations()
   else if (name === 'thesis') loadThesis()
+  else if (name === 'whois') loadWhois()
   else if (name === 'settings') loadSettings()
 }
 
@@ -570,6 +573,150 @@ async function syncBrain() {
   const res = await api('/brain/sync', { method: 'POST' })
   if (res?.synced) showToast('Synchronisé avec IPTV-Boss!')
   loadBrain()
+}
+
+// ==================== DOMAIN HARVESTER ====================
+async function loadWhois() {
+  const container = $('tab-whois')
+  const status = await api('/whois/status') || {}
+  container.innerHTML = `
+    <div class="section">
+      <h2>🌐 DNS Harvester</h2>
+      <div class="alert alert-info">Découvre des emails via DNS (DMARC/SPF/MX) sur des milliers de domaines IPTV générés automatiquement. Fonctionne sans connexion HTTP.</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="value">${status.totalDns || 0}</div><div class="label">📧 Emails DNS</div><div class="sub">dns_harvester</div></div>
+        <div class="stat-card"><div class="value">${status.withEmail || 0}</div><div class="label">📧 Total avec email</div><div class="sub">dans la base</div></div>
+      </div>
+      <div class="card">
+        <h3>🎯 Configuration DNS Harvester</h3>
+        <div class="flex" style="gap:12px;flex-wrap:wrap;margin-top:8px">
+          <div style="flex:1;min-width:160px">
+            <label>🌍 Zone</label>
+            <select id="h-area" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;margin-top:4px;font-size:13px">
+              <option value="fr">🇫🇷 France</option>
+              <option value="eu">🇪🇺 Europe</option>
+              <option value="all">🌐 Tous</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label>🗣️ Langue</label>
+            <select id="h-lang" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;margin-top:4px;font-size:13px">
+              <option value="fr">Français</option>
+              <option value="en">English</option>
+              <option value="all">Les deux</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label>🎯 Cibles</label>
+            <select id="h-count" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;margin-top:4px;font-size:13px">
+              <option value="25">25 (rapide)</option>
+              <option value="50" selected>50 (recommandé)</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="500">500 (lent)</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label>📡 Méthodes DNS</label>
+            <div style="margin-top:6px">
+              <label style="display:block;color:#888;font-size:12px"><input type="checkbox" id="h-dmarc" checked> DMARC (recommandé)</label>
+              <label style="display:block;color:#888;font-size:12px"><input type="checkbox" id="h-spf"> SPF</label>
+              <label style="display:block;color:#888;font-size:12px"><input type="checkbox" id="h-mx"> MX (lent)</label>
+            </div>
+          </div>
+        </div>
+        <div class="filters" style="margin-top:12px;gap:8px">
+          <button class="btn" onclick="runDnsHarvest()">🚀 Lancer DNS Harvest</button>
+          <button class="btn btn-secondary" onclick="checkSingleDomain()">🔍 Vérifier un domaine</button>
+        </div>
+      </div>
+      <div id="harvest-progress" style="margin-top:12px"></div>
+      <div id="harvest-results" style="margin-top:12px"></div>
+    </div>
+    <div class="section" style="margin-top:16px">
+      <h2>🔍 Vérifier DNS d'un domaine</h2>
+      <div class="card">
+        <div class="filters" style="margin-top:8px">
+          <input id="h-domain" placeholder="exemple.com" style="flex:1;padding:10px">
+          <button class="btn" onclick="checkSingleDomain()">🔍 Vérifier DNS</button>
+        </div>
+        <div id="h-check-result" style="margin-top:8px"></div>
+      </div>
+    </div>
+  `
+}
+
+async function runDnsHarvest() {
+  const btn = event.target
+  const area = $('h-area').value
+  const language = $('h-lang').value
+  const targetCount = $('h-count').value
+  const checkDmarc = $('h-dmarc').checked
+  const checkSpf = $('h-spf').checked
+  const checkMx = $('h-mx').checked
+  const progress = $('harvest-progress')
+  const results = $('harvest-results')
+
+  btn.disabled = true
+  btn.textContent = '⏳ Scan DNS en cours...'
+  progress.innerHTML = '<p style="color:#888">🔍 Vérification DNS des domaines IPTV... rapide ⚡</p>'
+  results.innerHTML = ''
+
+  const res = await api('/whois/harvest', {
+    method: 'POST',
+    body: JSON.stringify({
+      area, language,
+      targetCount: parseInt(targetCount),
+      checkDmarc, checkSpf, checkMx,
+      maxDomains: parseInt(targetCount) * 4
+    })
+  })
+
+  btn.disabled = false
+  btn.textContent = '🚀 Lancer DNS Harvest'
+
+  if (res?.error) {
+    progress.innerHTML = '<div class="alert alert-error">❌ ' + res.error + '</div>'
+    return
+  }
+
+  progress.innerHTML = ''
+  results.innerHTML = `
+    <div class="alert alert-success">
+      <strong>✅ Scan DNS terminé!</strong><br>
+      📡 Domaines découverts: ${res.discovered}<br>
+      🔍 Vérifiés: ${res.domains_checked}<br>
+      ✅ Existent (DNS): ${res.exists}<br>
+      📧 Emails trouvés: ${res.emails_found}<br>
+      💾 NOUVEAUX emails importés: <strong>${res.harvested}</strong>
+    </div>
+    ${res.domains_with_emails?.length ? `
+      <div style="margin-top:12px">
+        <h3 style="color:#fff;font-size:14px;margin-bottom:8px">Domaines avec emails (${res.domains_with_emails.length}):</h3>
+        <table><tr><th>Domaine</th><th>Existe</th><th>Emails</th></tr>
+        ${res.domains_with_emails.map(d => '<tr><td>'+d.domain+'</td><td>'+(d.exists?'✅':'❌')+'</td><td>'+d.emails.join(', ')+'</td></tr>').join('')}
+        </table>
+      </div>
+    ` : '<p style="color:#666;margin-top:12px">Aucun email trouvé via DNS. Essayez plus de cibles.</p>'}
+  `
+  if (res.harvested > 0) showToast(res.harvested + ' nouveaux emails importés!', 'success')
+  else showToast('Aucun nouvel email trouvé', 'info')
+}
+
+async function checkSingleDomain() {
+  const domain = $('h-domain').value.trim()
+  if (!domain) return showToast('Entrez un domaine', 'error')
+  const result = $('h-check-result')
+  result.innerHTML = '<p style="color:#888">⏳ Vérification DNS...</p>'
+  const res = await api('/whois/check/' + encodeURIComponent(domain))
+  result.innerHTML = `
+    <div class="alert alert-info">
+      <strong>${domain}</strong><br>
+      ✅ DNS records: ${res.exists ? 'OUI' : 'NON'}<br>
+      📧 Emails trouvés: ${res.emails?.length || 0}
+      ${res.emails?.length ? '<br><br>' + res.emails.map(e => '📧 ' + e).join('<br>') : '<br><br>❌ Aucun email DMARC trouvé'}
+    </div>
+  `
 }
 
 // ==================== SETTINGS ====================
