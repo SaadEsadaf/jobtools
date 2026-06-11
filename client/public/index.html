@@ -546,6 +546,8 @@ function loadSettings() {
       </div>
     </div>
   `
+}
+
 // ==================== AI PROVIDERS ====================
 async function loadAI() {
   const providers = await api('/settings/ai-providers')
@@ -1029,7 +1031,16 @@ async function directPublish() {
   resultDiv.innerHTML = res?.success ? '<div class="alert alert-success">✅ Publié avec succès!</div>' : '<div class="alert alert-error">' + (res?.error || 'Échec') + '</div>'
 }
 
-function escHtml(s) { if (!s) return ''; return s.replace(/[<>&"']/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'})[c]) }
+function escHtml(s) {
+  if (!s) return ''
+  var map = {}
+  map['<'] = '&lt;'
+  map['>'] = '&gt;'
+  map['&'] = '&amp;'
+  map['"'] = '&quot;'
+  map["'"] = '&#39;'
+  return s.replace(/[<>&"']/g, function(c) { return map[c] })
+}
 function copyText(btn) { const pre = btn.parentElement.nextElementSibling; if (pre) { navigator.clipboard.writeText(pre.textContent).then(() => showToast('Copié!')) } }
 
 </script>
