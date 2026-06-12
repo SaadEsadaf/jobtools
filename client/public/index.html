@@ -402,22 +402,71 @@ async function enrichLeads() {
 async function loadCampaigns() {
   const campaigns = await api('/campaigns')
   const templates = await api('/templates')
+  const stats = await api('/marketing/bulk/stats')
   if (!campaigns) return
   const container = $('tab-campaigns')
+  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [] }
   container.innerHTML = `
+    <style>
+    .bulk-batch-btn { padding: 10px 16px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #ccc; cursor: pointer; font-size: 12px; }
+    .bulk-batch-btn:hover { background: #3a3a3a; border-color: #e94560; }
+    .bulk-batch-btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+    .progress-bar { height: 6px; background: #2a2a2a; border-radius: 3px; margin: 12px 0; overflow: hidden; }
+    .progress-bar .fill { height: 100%; background: linear-gradient(90deg,#e94560,#ff6b35); border-radius: 3px; transition: width .5s; }
+    .log-line { padding: 4px 8px; font-size: 11px; color: #888; font-family: monospace; border-bottom: 1px solid #1a1a1a; }
+    .log-line .ts { color: #555; }
+    .log-line.success { color: #81c784; }
+    .log-line.error { color: #ef9a9a; }
+    </style>
     <div class="flex">
-      <div class="card" style="flex:0 0 300px">
-        <h3>📢 Nouvelle campagne</h3>
-        <label>Nom</label><input id="camp-name" placeholder="Ex: World Cup 2026">
-        <label>Description</label><textarea id="camp-desc" rows="2"></textarea>
-        <label>Template</label><select id="camp-template"><option value="">Sans template</option>${(templates||[]).map(t => '<option value="'+t.id+'">'+t.name+'</option>').join('')}</select>
-        <label>Type</label><select id="camp-type"><option value="email">Email</option><option value="social">Social</option><option value="mixed">Mixte</option></select>
-        <label>Cible (source)</label><input id="camp-source" placeholder="telegram, reddit, ...">
-        <label>Langue cible</label><input id="camp-lang" placeholder="fr, ar, es, ...">
-        <button class="btn" onclick="createCampaign()" style="width:100%;margin-top:8px">Créer la campagne</button>
+      <div class="card" style="flex:0 0 350px">
+        <h3>📧 Envoi groupé</h3>
+        <div class="stats-grid" style="margin-bottom:12px">
+          <div class="stat-card" style="padding:12px"><div class="value" style="font-size:20px">${s.total}</div><div class="label">Leads</div></div>
+          <div class="stat-card" style="padding:12px"><div class="value" style="font-size:20px;color:#81c784">${s.contacted}</div><div class="label">Contactés</div></div>
+          <div class="stat-card" style="padding:12px"><div class="value" style="font-size:20px;color:#ff6b35">${s.remaining}</div><div class="label">Restants</div></div>
+        </div>
+        <label style="display:block;color:#888;font-size:12px;margin-bottom:6px;">Template</label>
+        <select id="bulk-template" style="width:100%;padding:10px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px;margin-bottom:12px;">
+          <option value="trial">🎁 Free Trial Invitation</option>
+          <option value="site">🏠 Site Invitation</option>
+          <option value="event">🎉 Special Event (Dynamic)</option>
+        </select>
+        <label style="display:block;color:#888;font-size:12px;margin-bottom:6px;">Lot</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+          ${[50,100,150,200,300,400,500].map(n => '<button class="bulk-batch-btn" data-batch="'+n+'" onclick="selectBatch('+n+')">'+n+'</button>').join('')}
+          <button class="bulk-batch-btn" data-batch="all" onclick="selectBatch(-1)" style="background:#e94560;color:#fff;border-color:#e94560;">TOUT</button>
+        </div>
+        <div id="event-fields" style="display:none;margin-bottom:12px;">
+          <label style="display:block;color:#888;font-size:12px;margin-bottom:4px;">Event Name</label>
+          <input id="ev-name" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:12px;margin-bottom:6px;" placeholder="Eid al-Adha">
+          <label style="display:block;color:#888;font-size:12px;margin-bottom:4px;">Message</label>
+          <textarea id="ev-msg" rows="2" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:12px;margin-bottom:6px;" placeholder="Special access for this occasion..."></textarea>
+          <label style="display:block;color:#888;font-size:12px;margin-bottom:4px;">Campaign Name</label>
+          <input id="ev-camp" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:12px;margin-bottom:6px;" value="special_event_2026">
+          <div class="flex" style="gap:6px">
+            <label style="color:#888;font-size:11px;">Color</label>
+            <input id="ev-color" type="color" value="#ff6b35" style="width:40px;height:30px;background:transparent;border:none;cursor:pointer;">
+            <label style="color:#888;font-size:11px;">Emoji</label>
+            <input id="ev-emoji" style="width:40px;padding:4px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:14px;text-align:center;" value="🎉">
+            <label style="color:#888;font-size:11px;">CTA</label>
+            <input id="ev-cta" style="flex:1;padding:4px 8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:12px;" value="GET ACCESS NOW">
+          </div>
+        </div>
+        <button class="btn" onclick="sendBulk()" id="bulk-send-btn" style="width:100%;font-size:14px;padding:14px;">📤 ENVOYER</button>
+        <div class="progress-bar" id="bulk-progress" style="display:none;"><div class="fill" id="bulk-progress-fill" style="width:0%"></div></div>
+        <div style="font-size:11px;color:#666;margin-top:6px;text-align:center;" id="bulk-status"></div>
       </div>
       <div class="card" style="flex:1">
-        <h3>Campagnes existantes</h3>
+        <h3>📋 Log d'envoi</h3>
+        <div id="bulk-log" style="max-height:400px;overflow-y:auto;background:#0a0a0a;border-radius:6px;padding:4px;">
+          <div class="log-line" style="color:#555;">Sélectionnez un lot et envoyez...</div>
+        </div>
+      </div>
+    </div>
+    <div class="flex" style="margin-top:16px;">
+      <div class="card" style="flex:1">
+        <h3>📢 Campagnes</h3>
         <table>
           <tr><th>ID</th><th>Nom</th><th>Type</th><th>Statut</th><th>Template</th><th>Exécutée</th><th>🧠 Brain</th><th>Action</th></tr>
           ${campaigns.map(c => `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.type || '-'}</td><td>${statusBadge(c.status)}</td><td>${c.template_id || '-'}</td><td>${c.executed_at ? new Date(c.executed_at).toLocaleString() : '-'}</td><td>${c.notified_to_brain ? '✅' : '❌'}</td><td>${c.status === 'draft' ? `<button class="btn-sm" onclick="executeCampaign(${c.id})">▶️ Exécuter</button>` : '-'}</td></tr>`).join('')}
@@ -427,16 +476,90 @@ async function loadCampaigns() {
   `
 }
 
-async function createCampaign() {
-  const body = { name: $('camp-name').value, description: $('camp-desc').value, type: $('camp-type').value, template_id: parseInt($('camp-template').value) || null, target_source: $('camp-source').value || null, target_language: $('camp-lang').value || null }
-  if (!body.name) return showToast('Nom requis', 'error')
-  const res = await api('/campaigns', { method: 'POST', body: JSON.stringify(body) })
-  if (res?.id) { showToast('Campagne créée!'); loadCampaigns() }
+let selectedBatch = 50
+
+function selectBatch(n) {
+  selectedBatch = n
+  document.querySelectorAll('.bulk-batch-btn').forEach(b => b.classList.remove('active'))
+  document.querySelectorAll('.bulk-batch-btn[data-batch="' + (n === -1 ? 'all' : n) + '"]').forEach(b => b.classList.add('active'))
 }
 
-async function executeCampaign(id) {
-  const res = await api('/campaigns/execute/' + id, { method: 'POST', body: JSON.stringify({ injectionTypes: ['email_sequence', 'social_post', 'whatsapp_message'] }) })
-  if (res) { showToast('Campagne exécutée!'); loadCampaigns() }
+function logBulk(msg, type) {
+  const log = $('bulk-log')
+  const ts = new Date().toLocaleTimeString()
+  log.innerHTML += '<div class="log-line' + (type ? ' ' + type : '') + '"><span class="ts">['+ts+']</span> ' + msg + '</div>'
+  log.scrollTop = log.scrollHeight
+}
+
+// Show/hide event fields based on template selection
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.id === 'bulk-template') {
+    document.getElementById('event-fields').style.display = e.target.value === 'event' ? 'block' : 'none'
+  }
+})
+
+async function sendBulk() {
+  const template = document.getElementById('bulk-template').value
+  const btn = document.getElementById('bulk-send-btn')
+  const progress = document.getElementById('bulk-progress')
+  const progressFill = document.getElementById('bulk-progress-fill')
+  const status = document.getElementById('bulk-status')
+  const log = document.getElementById('bulk-log')
+
+  let batchSize = selectedBatch === -1 ? 10000 : selectedBatch
+
+  // Confirm
+  if (!confirm('Send ' + batchSize + ' emails using ' + template + ' template?')) return
+
+  btn.disabled = true
+  btn.textContent = '⏳ Sending...'
+  progress.style.display = 'block'
+  log.innerHTML = ''
+  logBulk('Starting bulk send: ' + batchSize + ' emails, template: ' + template)
+
+  // Ensure templates exist in IPTV Boss
+  await api('/marketing/templates/ensure', { method: 'POST' })
+  logBulk('Templates synced to IPTV Boss')
+
+  // Prepare body
+  const body = { batchSize, template, campaignName: 'bulk_' + template + '_' + Date.now() }
+
+  // If event template, add event variables
+  if (template === 'event') {
+    body.eventVars = {
+      event_name: document.getElementById('ev-name').value || 'Special Event',
+      event_subtitle: 'Exclusive IPTV Access',
+      event_message: document.getElementById('ev-msg').value || 'Enjoy special access during this occasion.',
+      event_details: 'Limited time offer',
+      event_color: document.getElementById('ev-color').value || '#ff6b35',
+      event_emoji: document.getElementById('ev-emoji').value || '🎉',
+      event_cta: document.getElementById('ev-cta').value || 'GET ACCESS NOW'
+    }
+    body.campaignName = document.getElementById('ev-camp').value || 'special_event'
+  }
+
+  try {
+    const resp = await api('/marketing/bulk/send', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    })
+
+    if (resp.error) {
+      logBulk('❌ ' + resp.error, 'error')
+      status.textContent = 'Error: ' + resp.error
+    } else {
+      logBulk('✅ Sent: ' + resp.sent + ' / ' + resp.total, 'success')
+      if (resp.failed > 0) logBulk('⚠️ Failed: ' + resp.failed, 'error')
+      status.textContent = resp.sent + '/' + resp.total + ' sent' + (resp.failed > 0 ? ', ' + resp.failed + ' failed' : '')
+      progressFill.style.width = '100%'
+    }
+  } catch (e) {
+    logBulk('❌ Error: ' + e.message, 'error')
+    status.textContent = 'Error'
+  }
+
+  btn.disabled = false
+  btn.textContent = '📤 ENVOYER'
 }
 
 // ==================== TEMPLATES ====================
@@ -784,6 +907,12 @@ async function loadSettings() {
         <div class="setting-row"><label>Mot de passe</label><input class="s-field" data-key="smtp_pass" value="${esc(settings.smtp_pass || '')}" type="password" placeholder="********"></div>
         <div class="setting-row"><label>Nom d'expéditeur</label><input class="s-field" data-key="smtp_from_name" value="${esc(settings.smtp_from_name || 'Dalletek')}"></div>
         <div class="setting-row"><label>Email d'expéditeur</label><input class="s-field" data-key="smtp_from_email" value="${esc(settings.smtp_from_email || '')}" placeholder="noreply@dalletek.live"></div>
+      </div>
+      <div class="card" style="max-width:700px">
+        <h3>🔐 Social Login (Google/Apple)</h3>
+        <div class="setting-row"><label>Google Client ID</label><input class="s-field" data-key="google_client_id" value="${esc(settings.google_client_id || '')}" placeholder="1234567890-abc123.apps.googleusercontent.com"></div>
+        <div class="setting-row"><label>Apple Service ID</label><input class="s-field" data-key="apple_client_id" value="${esc(settings.apple_client_id || '')}" placeholder="com.example.service"></div>
+        <p style="color:#666;font-size:12px;margin-top:8px;">Ces IDs sont utilisés par IPTV-Boss pour permettre aux clients de se connecter avec leur compte Google ou Apple.</p>
       </div>
       <button class="btn" onclick="saveAppSettings()" style="margin-top:16px">💾 Sauvegarder tous les paramètres</button>
       <div class="card" style="max-width:700px;margin-top:24px">
