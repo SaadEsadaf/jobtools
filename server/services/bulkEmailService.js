@@ -1,6 +1,6 @@
 const { getDb } = require('../db');
 const { sendMail } = require('./marketingMailer');
-const { sendViaSendGrid } = require('./sendgridService');
+const { sendViaSendGrid, getSendGridLimit } = require('./sendgridService');
 
 const IPTV_BOSS_URL = process.env.IPTV_BOSS_URL || 'http://localhost:3001';
 
@@ -141,6 +141,16 @@ function getCombinedDailyLimit() {
   return getBrevoLimit() + getSendGridLimit();
 }
 
+function getReservedQuota() {
+  const db = getDb();
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'reserved_quota'").get();
+  return parseInt(row?.value || '10');
+}
+
+function getCampaignQuota() {
+  return Math.max(0, getCombinedDailyLimit() - getReservedQuota());
+}
+
 async function sendEmailFallback(lead, subject, html, campaignName) {
   const db = getDb();
   const email = lead.email;
@@ -210,7 +220,7 @@ async function sendBulkEmails(leads, templateKey, campaignName = 'bulk_campaign'
   if (!leads || leads.length === 0) return { sent: 0, total: 0 };
 
   const db = getDb();
-  const dailyLimit = getCombinedDailyLimit();
+  const dailyLimit = getCampaignQuota();
   const sentToday = getDailyCount();
   const remaining = Math.max(0, dailyLimit - sentToday);
   const maxToSend = Math.min(leads.length, remaining);
@@ -281,4 +291,4 @@ async function ensureTemplates() {
   }
 }
 
-module.exports = { getLeadsForBatch, sendBulkEmails, ensureTemplates, getDailyCount, getBrevoLimit, getCombinedDailyLimit, TEMPLATES, BATCH_SIZES };
+module.exports = { getLeadsForBatch, sendBulkEmails, ensureTemplates, getDailyCount, getBrevoLimit, getCombinedDailyLimit, getCampaignQuota, getReservedQuota, TEMPLATES, BATCH_SIZES };

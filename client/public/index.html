@@ -429,7 +429,7 @@ async function loadCampaigns() {
   const stats = await api('/marketing/bulk/stats')
   if (!campaigns) return
   const container = $('tab-campaigns')
-  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [], sentToday: 0, dailyLimit: 400, remainingToday: 400, sendgridLimit: 100 }
+  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [], sentToday: 0, dailyLimit: 390, remainingToday: 390, sendgridLimit: 100, reservedQuota: 10, totalDailyQuota: 400 }
   const limitPct = s.dailyLimit > 0 ? Math.round((s.sentToday / s.dailyLimit) * 100) : 0
   const limitColor = limitPct >= 90 ? '#ef9a9a' : limitPct >= 70 ? '#ffb74d' : '#81c784'
   container.innerHTML = `
@@ -459,7 +459,7 @@ async function loadCampaigns() {
           </div>
           <div class="progress-bar" style="height:4px;margin:0;"><div class="fill" style="width:${limitPct}%;background:${limitColor};"></div></div>
           <div style="font-size:11px;color:#666;margin-top:4px;">
-            ${s.remainingToday > 0 ? `✅ ${s.remainingToday} emails restants (Brevo ${s.dailyLimit - s.sendgridLimit} + SendGrid ${s.sendgridLimit})` : '❌ Limite quotidienne atteinte sur tous les providers'}
+            ${s.remainingToday > 0 ? `✅ ${s.remainingToday} campagnes + ${s.reservedQuota} réservés commandes (Brevo ${s.totalDailyQuota - s.sendgridLimit} + SendGrid ${s.sendgridLimit})` : `❌ Quota campagnes atteint (réserve ${s.reservedQuota} gardée pour commandes)`}
           </div>
         </div>
         <label style="display:block;color:#888;font-size:12px;margin-bottom:6px;">Template</label>
@@ -1288,6 +1288,7 @@ async function loadSettings() {
         <div class="setting-row"><label>Clé API SendGrid</label><input class="s-field" data-key="sendgrid_api_key" value="${esc(settings.sendgrid_api_key || '')}" type="password" placeholder="SG.xxxxx.xxxxx"></div>
         <div class="setting-row"><label>Limite journalière</label><input class="s-field" data-key="sendgrid_daily_limit" value="${esc(settings.sendgrid_daily_limit || '100')}" placeholder="100"></div>
         <div class="setting-row"><label>Limite Brevo</label><input class="s-field" data-key="brevo_daily_limit" value="${esc(settings.brevo_daily_limit || '300')}" placeholder="300"></div>
+        <div class="setting-row"><label>Réserve pour commandes (emails/jour)</label><input class="s-field" data-key="reserved_quota" value="${esc(settings.reserved_quota || '10')}" placeholder="10"></div>
         <div style="margin-top:8px;display:flex;gap:8px;">
           <button class="btn-sm btn-secondary" onclick="testSendGrid()">🧪 Tester SendGrid</button>
           <span id="sendgrid-test-result" style="font-size:12px;line-height:30px;"></span>

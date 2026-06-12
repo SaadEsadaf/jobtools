@@ -93,7 +93,7 @@ router.post('/bulk/send', authMiddleware, async (req, res) => {
 
 router.get('/bulk/stats', authMiddleware, (req, res) => {
   const { getDb } = require('../db')
-  const { getDailyCount, getCombinedDailyLimit } = require('../services/bulkEmailService')
+  const { getDailyCount, getCampaignQuota, getReservedQuota } = require('../services/bulkEmailService')
   const { getSendGridLimit } = require('../services/sendgridService')
   const db = getDb()
   const total = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 AND (notes IS NULL OR (notes NOT LIKE '%no_mx%' AND notes NOT LIKE '%invalid%'))").get().c
@@ -101,9 +101,15 @@ router.get('/bulk/stats', authMiddleware, (req, res) => {
   const contacted = db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'contacted'").get().c
   const remaining = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 AND (notes IS NULL OR (notes NOT LIKE '%no_mx%' AND notes NOT LIKE '%invalid%')) AND (status IS NULL OR status != 'contacted')").get().c
   const sentToday = getDailyCount()
-  const combinedLimit = getCombinedDailyLimit()
+  const campaignQuota = getCampaignQuota()
+  const reserved = getReservedQuota()
   const sendgrid = getSendGridLimit()
-  res.json({ total, contacted, remaining, bySource, sentToday, dailyLimit: combinedLimit, remainingToday: Math.max(0, combinedLimit - sentToday), sendgridLimit: sendgrid })
+  res.json({
+    total, contacted, remaining, bySource,
+    sentToday, dailyLimit: campaignQuota, reservedQuota: reserved,
+    remainingToday: Math.max(0, campaignQuota - sentToday),
+    sendgridLimit: sendgrid, totalDailyQuota: campaignQuota + reserved
+  })
 })
 
 router.post('/test', authMiddleware, async (req, res) => {
