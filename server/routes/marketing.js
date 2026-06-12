@@ -93,12 +93,35 @@ router.post('/bulk/send', authMiddleware, async (req, res) => {
 
 router.get('/bulk/stats', authMiddleware, (req, res) => {
   const { getDb } = require('../db')
+  const { getDailyCount, getBrevoLimit } = require('../services/bulkEmailService')
   const db = getDb()
   const total = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 AND (notes IS NULL OR (notes NOT LIKE '%no_mx%' AND notes NOT LIKE '%invalid%'))").get().c
   const bySource = db.prepare("SELECT source, COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 GROUP BY source ORDER BY c DESC").all()
   const contacted = db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'contacted'").get().c
   const remaining = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 AND (notes IS NULL OR (notes NOT LIKE '%no_mx%' AND notes NOT LIKE '%invalid%')) AND (status IS NULL OR status != 'contacted')").get().c
-  res.json({ total, contacted, remaining, bySource })
+  const sentToday = getDailyCount()
+  const dailyLimit = getBrevoLimit()
+  res.json({ total, contacted, remaining, bySource, sentToday, dailyLimit, remainingToday: Math.max(0, dailyLimit - sentToday) })
+})
+
+router.post('/test', authMiddleware, async (req, res) => {
+  try {
+    const { email } = req.body
+    if (!email) return res.status(400).json({ error: 'Email required' })
+    const { sendMail } = require('../services/marketingMailer')
+    await sendMail(email, '🧪 Test Email — JobTools Marketing Lab', `
+      <div style="font-family:sans-serif;max-width:500px;margin:0 auto;background:#1a1a1a;color:#e0e0e0;padding:32px;border-radius:12px;">
+        <h1 style="color:#4caf50;">✅ SMTP Configuration Works!</h1>
+        <p>This is a test email from <strong>JobTools Marketing Lab</strong>.</p>
+        <p style="color:#888;">Your SMTP settings are correct and emails are being delivered.</p>
+        <hr style="border-color:#2a2a2a;margin:16px 0;">
+        <p style="color:#555;font-size:12px;">Sent at ${new Date().toISOString()}</p>
+      </div>
+    `)
+    res.json({ sent: true, email })
+  } catch (e) {
+    res.status(500).json({ sent: false, error: e.message })
+  }
 })
 
 router.post('/templates/ensure', authMiddleware, async (req, res) => {

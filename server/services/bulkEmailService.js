@@ -1,4 +1,5 @@
 const { getDb } = require('../db');
+const { sendMail } = require('./marketingMailer');
 
 const IPTV_BOSS_URL = process.env.IPTV_BOSS_URL || 'http://localhost:3001';
 
@@ -114,64 +115,134 @@ async function getLeadsForBatch(batchSize, priority = 0) {
   `).all(batchSize);
 }
 
-async function sendBulkEmails(leads, templateKey, campaignName = 'bulk_campaign', variables = {}) {
-  if (!leads || leads.length === 0) return { sent: 0, total: 0 };
-
+function getDailyCount() {
   const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = ?").get(`sent_count_${today}`);
+  return parseInt(row?.value || '0');
+}
+
+function incrementDailyCount() {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `sent_count_${today}`;
+  const current = getDailyCount();
+  db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)").run(key, String(current + 1));
+}
+
+function getBrevoLimit() {
+  const db = getDb();
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'brevo_daily_limit'").get();
+  return parseInt(row?.value || '300');
+}
+
+async function sendEmailFallback(lead, subject, html, campaignName) {
+  const db = getDb();
+  const email = lead.email;
+  const name = lead.name || lead.first_name || lead.email.split('@')[0];
   const siteUrl = 'https://dalletek.live';
-  const trackingBase = `${siteUrl}/api/tracking`;
 
-  // Rate limit: 20/hr = 1 every 3 min or batch faster
-  // For now send with 3s delay between each
-  let sent = 0;
-  let failed = 0;
-
-  for (const lead of leads) {
-    const email = lead.email;
-    const name = lead.name || lead.first_name || lead.email.split('@')[0];
-
+  // Try IPTV-Boss bridge first
+  try {
+    const trackingBase = `${siteUrl}/api/tracking`;
     const trackingPixel = `${trackingBase}/pixel.gif?campaign=${encodeURIComponent(campaignName)}&email=${encodeURIComponent(email)}&t=${Date.now()}`;
     const claimUrl = `${siteUrl}/trial?email=${encodeURIComponent(email)}&utm_source=email&utm_medium=${encodeURIComponent(campaignName)}`;
     const unsubscribeUrl = `${siteUrl}/unsubscribe?email=${encodeURIComponent(email)}`;
 
-    try {
-      const resp = await fetch(`${IPTV_BOSS_URL}/api/campaigns/blast-single`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          name,
-          template_key: templateKey,
-          campaign_name: campaignName,
-          variables: {
-            customer_name: name,
-            customer_email: email,
-            site_name: 'Dalletek',
-            site_url: siteUrl,
-            claim_url: claimUrl,
-            trial_code: '',
-            tracking_pixel: trackingPixel,
-            unsubscribe_url: unsubscribeUrl,
-            ...variables,
-          },
-        }),
-      });
-      const data = await resp.json();
-      if (data.sent) {
-        sent++;
-        db.prepare("UPDATE leads SET status = 'contacted', notes = COALESCE(NULLIF(notes, ''), '') || ' | " + campaignName + "_sent' WHERE id = ?").run(lead.id);
-      } else {
-        failed++;
-      }
-    } catch (e) {
-      failed++;
-      console.error(`[BulkEmail] Failed to ${email}:`, e.message);
+    const resp = await fetch(`${IPTV_BOSS_URL}/api/campaigns/blast-single`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        name,
+        template_key: 'trial_invitation',
+        campaign_name: campaignName,
+        variables: {
+          customer_name: name,
+          customer_email: email,
+          site_name: 'Dalletek',
+          site_url: siteUrl,
+          claim_url: claimUrl,
+          trial_code: '',
+          tracking_pixel: trackingPixel,
+          unsubscribe_url: unsubscribeUrl,
+        },
+      }),
+    });
+    const data = await resp.json();
+    if (data.sent) {
+      incrementDailyCount();
+      db.prepare("UPDATE leads SET status = 'contacted', notes = COALESCE(NULLIF(notes, ''), '') || ' | " + campaignName + "_sent' WHERE id = ?").run(lead.id);
+      return true;
+    }
+  } catch (e) {
+    // IPTV-Boss bridge failed — fall through to direct SMTP
+  }
+
+  // Fallback: send directly via SMTP
+  try {
+    await sendMail(email, subject, html);
+    incrementDailyCount();
+    db.prepare("UPDATE leads SET status = 'contacted', notes = COALESCE(NULLIF(notes, ''), '') || ' | " + campaignName + "_sent_direct' WHERE id = ?").run(lead.id);
+    return true;
+  } catch (e) {
+    console.error(`[BulkEmail] Direct SMTP failed for ${email}:`, e.message);
+    return false;
+  }
+}
+
+async function sendBulkEmails(leads, templateKey, campaignName = 'bulk_campaign', variables = {}) {
+  if (!leads || leads.length === 0) return { sent: 0, total: 0 };
+
+  const db = getDb();
+  const dailyLimit = getBrevoLimit();
+  const sentToday = getDailyCount();
+  const remaining = Math.max(0, dailyLimit - sentToday);
+  const maxToSend = Math.min(leads.length, remaining);
+
+  if (maxToSend === 0) {
+    return { sent: 0, failed: leads.length, total: leads.length, dailyLimitReached: true, sentToday, dailyLimit };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let stoppedByLimit = false;
+
+  for (let i = 0; i < maxToSend; i++) {
+    const lead = leads[i];
+    const email = lead.email;
+    const name = lead.name || lead.first_name || lead.email.split('@')[0];
+    const subject = variables.subject || `🎁 Free IPTV Trial — Just for You!`;
+    const html = variables.html || `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a1a;color:#e0e0e0;padding:32px;border-radius:12px;">
+        <h1 style="color:#ffd700;">🎁 Free Trial Waiting</h1>
+        <p>Hi ${name},</p>
+        <p>Claim your <strong>72-hour free trial</strong> and enjoy 179,915+ channels in 4K.</p>
+        <div style="text-align:center;margin:24px 0;">
+          <a href="https://dalletek.live/trial?email=${encodeURIComponent(email)}" style="display:inline-block;background:#ffd700;color:#000;padding:14px 36px;border-radius:50px;font-weight:800;text-decoration:none;">🎁 CLAIM FREE TRIAL</a>
+        </div>
+        <p style="color:#888;font-size:12px;">No credit card needed · 24/7 support</p>
+        <p style="color:#555;font-size:11px;margin-top:16px;"><a href="https://dalletek.live/unsubscribe?email=${encodeURIComponent(email)}" style="color:#555;">Unsubscribe</a></p>
+      </div>`;
+
+    const ok = await sendEmailFallback(lead, subject, html, campaignName);
+    if (ok) sent++;
+    else failed++;
+
+    // Check if we hit daily limit mid-batch
+    const currentSent = getDailyCount();
+    if (currentSent >= dailyLimit && i < leads.length - 1) {
+      stoppedByLimit = true;
+      const skipped = leads.length - i - 1;
+      failed += skipped;
+      console.log(`[BulkEmail] Daily limit ${dailyLimit} reached. Stopping. Skipped ${skipped} leads.`);
+      break;
     }
 
     await new Promise(r => setTimeout(r, 3000));
   }
 
-  return { sent, failed, total: leads.length };
+  return { sent, failed, total: leads.length, sentToday: getDailyCount(), dailyLimit, stoppedByLimit };
 }
 
 async function createTemplateInIPTVBoss(templateKey, name, subject, bodyHtml, variables) {

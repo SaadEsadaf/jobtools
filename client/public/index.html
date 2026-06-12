@@ -429,7 +429,9 @@ async function loadCampaigns() {
   const stats = await api('/marketing/bulk/stats')
   if (!campaigns) return
   const container = $('tab-campaigns')
-  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [] }
+  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [], sentToday: 0, dailyLimit: 300, remainingToday: 300 }
+  const limitPct = s.dailyLimit > 0 ? Math.round((s.sentToday / s.dailyLimit) * 100) : 0
+  const limitColor = limitPct >= 90 ? '#ef9a9a' : limitPct >= 70 ? '#ffb74d' : '#81c784'
   container.innerHTML = `
     <style>
     .bulk-batch-btn { padding: 10px 16px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #ccc; cursor: pointer; font-size: 12px; }
@@ -443,12 +445,22 @@ async function loadCampaigns() {
     .log-line.error { color: #ef9a9a; }
     </style>
     <div class="flex">
-      <div class="card" style="flex:0 0 350px">
+      <div class="card" style="flex:0 0 380px">
         <h3>📧 Envoi groupé</h3>
-        <div class="stats-grid" style="margin-bottom:12px">
-          <div class="stat-card" style="padding:12px"><div class="value" style="font-size:20px">${s.total}</div><div class="label">Leads</div></div>
-          <div class="stat-card" style="padding:12px"><div class="value" style="font-size:20px;color:#81c784">${s.contacted}</div><div class="label">Contactés</div></div>
-          <div class="stat-card" style="padding:12px"><div class="value" style="font-size:20px;color:#ff6b35">${s.remaining}</div><div class="label">Restants</div></div>
+        <div class="stats-grid" style="margin-bottom:12px;grid-template-columns:repeat(3,1fr)">
+          <div class="stat-card" style="padding:10px"><div class="value" style="font-size:18px">${s.total}</div><div class="label">Leads</div></div>
+          <div class="stat-card" style="padding:10px"><div class="value" style="font-size:18px;color:#81c784">${s.contacted}</div><div class="label">Contactés</div></div>
+          <div class="stat-card" style="padding:10px"><div class="value" style="font-size:18px;color:#ff6b35">${s.remaining}</div><div class="label">Restants</div></div>
+        </div>
+        <div class="card" style="padding:10px;margin-bottom:12px;background:#0d0d0d;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="color:#888;">📊 Envois aujourd'hui</span>
+            <span style="color:${limitColor};font-weight:600;">${s.sentToday} / ${s.dailyLimit}</span>
+          </div>
+          <div class="progress-bar" style="height:4px;margin:0;"><div class="fill" style="width:${limitPct}%;background:${limitColor};"></div></div>
+          <div style="font-size:11px;color:#666;margin-top:4px;">
+            ${s.remainingToday > 0 ? `✅ ${s.remainingToday} emails restants aujourd'hui` : '❌ Limite quotidienne atteinte (Brevo) — configurez un SMTP direct dans ⚙️ Paramètres'}
+          </div>
         </div>
         <label style="display:block;color:#888;font-size:12px;margin-bottom:6px;">Template</label>
         <select id="bulk-template" style="width:100%;padding:10px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px;margin-bottom:12px;">
@@ -458,7 +470,7 @@ async function loadCampaigns() {
         </select>
         <label style="display:block;color:#888;font-size:12px;margin-bottom:6px;">Lot</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
-          ${[50,100,150,200,300,400,500].map(n => '<button class="bulk-batch-btn" data-batch="'+n+'" onclick="selectBatch('+n+')">'+n+'</button>').join('')}
+          ${[10,25,50,100,150,200,300].map(n => '<button class="bulk-batch-btn" data-batch="'+n+'" onclick="selectBatch('+n+')">'+n+'</button>').join('')}
           <button class="bulk-batch-btn" data-batch="all" onclick="selectBatch(-1)" style="background:#e94560;color:#fff;border-color:#e94560;">TOUT</button>
         </div>
         <div id="event-fields" style="display:none;margin-bottom:12px;">
@@ -490,10 +502,10 @@ async function loadCampaigns() {
     </div>
     <div class="flex" style="margin-top:16px;">
       <div class="card" style="flex:1">
-        <h3>📢 Campagnes</h3>
+        <h3>📢 Campagnes <button class="btn-sm btn-secondary" onclick="showCreateCampaignForm()" style="margin-left:8px">➕ Nouvelle</button></h3>
         <table>
-          <tr><th>ID</th><th>Nom</th><th>Type</th><th>Statut</th><th>Template</th><th>Exécutée</th><th>🧠 Brain</th><th>Action</th></tr>
-          ${campaigns.map(c => `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.type || '-'}</td><td>${statusBadge(c.status)}</td><td>${c.template_id || '-'}</td><td>${c.executed_at ? new Date(c.executed_at).toLocaleString() : '-'}</td><td>${c.notified_to_brain ? '✅' : '❌'}</td><td>${c.status === 'draft' ? `<button class="btn-sm" onclick="executeCampaign(${c.id})">▶️ Exécuter</button>` : '-'}</td></tr>`).join('')}
+          <tr><th>ID</th><th>Nom</th><th>Filtres</th><th>Statut</th><th>Template</th><th>Résultat</th><th>Action</th></tr>
+          ${campaigns.length === 0 ? '<tr><td colspan="7" style="color:#555;text-align:center;">Aucune campagne créée</td></tr>' : campaigns.map(c => `<tr><td>${c.id}</td><td>${c.name}</td><td style="font-size:11px">${[c.target_source, c.target_language, c.target_intent].filter(Boolean).join(', ') || '-'}</td><td>${statusBadge(c.status)}</td><td>${c.template_id || '-'}</td><td style="font-size:11px;color:#888;">${c.results ? JSON.parse(c.results).map(r => (r.actions||[]).map(a => a.sent+'/'+a.totalLeads+' sent').join(', ')).join('; ') : '-'}</td><td>${c.status === 'draft' ? `<button class="btn-sm" onclick="executeCampaign(${c.id})">▶️ Exécuter</button>` : c.status === 'executed' ? `<span style="color:#555;font-size:11px;">✅ Exécutée</span>` : '-'}</td></tr>`).join('')}
         </table>
       </div>
     </div>
@@ -574,7 +586,10 @@ async function sendBulk() {
     } else {
       logBulk('✅ Sent: ' + resp.sent + ' / ' + resp.total, 'success')
       if (resp.failed > 0) logBulk('⚠️ Failed: ' + resp.failed, 'error')
-      status.textContent = resp.sent + '/' + resp.total + ' sent' + (resp.failed > 0 ? ', ' + resp.failed + ' failed' : '')
+      if (resp.dailyLimitReached) logBulk('🚫 Limite journalière atteinte (' + resp.dailyLimit + ') - Configurez SMTP direct dans ⚙️ Paramètres', 'error')
+      if (resp.stoppedByLimit) logBulk('⛔ Arrêté par limite journalière - ' + resp.sentToday + '/' + resp.dailyLimit + ' envoyés aujourd\'hui', 'error')
+      if (resp.sentToday !== undefined) logBulk('📊 Envoyés aujourd\'hui: ' + resp.sentToday + '/' + resp.dailyLimit, '')
+      status.textContent = resp.sent + '/' + resp.total + ' sent' + (resp.failed > 0 ? ', ' + resp.failed + ' failed' : '') + (resp.stoppedByLimit ? ' (limit reached)' : '')
       progressFill.style.width = '100%'
     }
   } catch (e) {
@@ -584,6 +599,77 @@ async function sendBulk() {
 
   btn.disabled = false
   btn.textContent = '📤 ENVOYER'
+}
+
+// ==================== CAMPAIGN FORM ====================
+async function showCreateCampaignForm() {
+  const templates = await api('/templates') || []
+  const sources = await api('/leads/stats').then(s => (s?.bySource || []).map(x => x.source)) || []
+  const languages = await api('/leads/stats').then(s => (s?.byLanguage || []).map(x => x.language)) || []
+  const modal = document.createElement('div')
+  modal.className = 'modal-overlay active'
+  modal.innerHTML = `
+    <div class="modal">
+      <h2>📢 Nouvelle campagne</h2>
+      <label>Nom de la campagne</label>
+      <input id="camp-name" placeholder="Ex: Free Trial FR">
+      <label>Description</label>
+      <textarea id="camp-desc" rows="2" placeholder="Description optionnelle"></textarea>
+      <label>Type</label>
+      <select id="camp-type"><option value="email">📧 Email</option><option value="social">📱 Social</option><option value="landing">🌐 Landing Page</option></select>
+      <label>Filtre — Source</label>
+      <select id="camp-source"><option value="">Toutes les sources</option>${sources.map(s => '<option value="'+s+'">'+s+'</option>').join('')}</select>
+      <label>Filtre — Langue</label>
+      <select id="camp-lang"><option value="">Toutes les langues</option>${languages.map(l => '<option value="'+l+'">'+l+'</option>').join('')}</select>
+      <label>Template</label>
+      <select id="camp-template"><option value="">Aucun template</option>${templates.map(t => '<option value="'+t.id+'">'+t.name+' ('+t.type+')</option>').join('')}</select>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Annuler</button>
+        <button class="btn" onclick="createCampaign()">Créer</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(modal)
+  modal.onclick = e => { if (e.target === modal) modal.remove() }
+}
+
+async function createCampaign() {
+  const name = document.getElementById('camp-name').value
+  if (!name) return showToast('Nom requis', 'error')
+  const body = {
+    name,
+    description: document.getElementById('camp-desc').value,
+    type: document.getElementById('camp-type').value,
+    target_source: document.getElementById('camp-source').value || null,
+    target_language: document.getElementById('camp-lang').value || null,
+    template_id: document.getElementById('camp-template').value ? parseInt(document.getElementById('camp-template').value) : null,
+  }
+  const res = await api('/campaigns', { method: 'POST', body: JSON.stringify(body) })
+  if (res?.id) {
+    showToast('Campagne créée!')
+    document.querySelector('.modal-overlay')?.remove()
+    loadCampaigns()
+  }
+}
+
+async function executeCampaign(id) {
+  if (!confirm('Exécuter la campagne #' + id + ' ? Des emails seront envoyés.')) return
+  const res = await api('/campaigns/execute/' + id, {
+    method: 'POST',
+    body: JSON.stringify({ injectionTypes: ['email_sequence'] })
+  })
+  if (res?.status === 'executed') {
+    showToast('Campagne exécutée!')
+    loadCampaigns()
+    const results = res.results || []
+    const emailResult = results.find(r => r.target === 'email_sequence')
+    if (emailResult?.actions?.[0]) {
+      const a = emailResult.actions[0]
+      showToast('📧 ' + (a.sent || 0) + ' emails envoyés sur ' + (a.totalLeads || 0) + ' leads', a.sent > 0 ? 'success' : 'info')
+    }
+  } else {
+    showToast('Erreur: ' + (res?.error || 'inconnue'), 'error')
+  }
 }
 
 // ==================== TEMPLATES ====================
@@ -1191,6 +1277,11 @@ async function loadSettings() {
         <div class="setting-row"><label>Mot de passe</label><input class="s-field" data-key="smtp_pass" value="${esc(settings.smtp_pass || '')}" type="password" placeholder="********"></div>
         <div class="setting-row"><label>Nom d'expéditeur</label><input class="s-field" data-key="smtp_from_name" value="${esc(settings.smtp_from_name || 'Dalletek')}"></div>
         <div class="setting-row"><label>Email d'expéditeur</label><input class="s-field" data-key="smtp_from_email" value="${esc(settings.smtp_from_email || '')}" placeholder="noreply@dalletek.live"></div>
+        <div style="margin-top:8px;display:flex;gap:8px;">
+          <input id="smtp-test-email" class="s-field" style="flex:1" placeholder="babilon26@gmail.com" value="babilon26@gmail.com">
+          <button class="btn-sm btn-secondary" onclick="testSmtp()">🧪 Tester SMTP</button>
+        </div>
+        <div id="smtp-test-result" style="font-size:12px;margin-top:4px;"></div>
       </div>
       <div class="card" style="max-width:700px">
         <h3>🔐 Social Login (Google/Apple)</h3>
@@ -1210,6 +1301,21 @@ async function loadSettings() {
   `
 }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+async function testSmtp() {
+  const email = document.getElementById('smtp-test-email')?.value
+  if (!email) return showToast('Entrez un email de test', 'error')
+  const result = document.getElementById('smtp-test-result')
+  result.innerHTML = '⏳ Test en cours...'
+  const res = await api('/marketing/test', { method: 'POST', body: JSON.stringify({ email }) })
+  if (res?.sent) {
+    result.innerHTML = '✅ Email de test envoyé avec succès à ' + email
+    showToast('✅ SMTP OK!')
+  } else {
+    result.innerHTML = '❌ Échec: ' + (res?.error || 'inconnu')
+    showToast('❌ SMTP Échec: ' + (res?.error || 'inconnu'), 'error')
+  }
+}
+
 async function saveAppSettings() {
   const fields = document.querySelectorAll('.s-field')
   const checks = document.querySelectorAll('.s-check')

@@ -38,4 +38,18 @@ function renderEmailTemplate(templateKey, vars) {
   return { body, subject };
 }
 
-module.exports = { getMailer, renderEmailTemplate };
+async function sendMail(to, subject, html) {
+  const mailer = getMailer();
+  if (!mailer.fromEmail) {
+    throw new Error('SMTP not configured — set smtp_host, smtp_user, smtp_pass, smtp_from_email in Settings');
+  }
+  const info = await mailer.sendMail({
+    from: `"${mailer.fromName || 'Dalletek'}" <${mailer.fromEmail}>`,
+    to,
+    subject,
+    html,
+  });
+  return info;
+}
+
+module.exports = { getMailer, renderEmailTemplate, sendMail };
