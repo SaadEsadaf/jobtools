@@ -739,6 +739,8 @@ async function loadLeadLab() {
         <div class="stat-card"><div class="value">${snifferStats.leadsToday || 0}</div><div class="label">📅 Aujourd'hui</div></div>
       </div>
 
+      <button class="btn" onclick="runAllLabTools()" style="width:100%;margin-bottom:16px;background:linear-gradient(135deg,#667eea,#764ba2);font-size:16px;padding:16px">⚡ LANCER TOUS LES OUTILS (Run All)</button>
+
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
 
         <div class="card">
@@ -750,7 +752,7 @@ async function loadLeadLab() {
 
         <div class="card">
           <h3>📧 Extraction d'emails (raw_data)</h3>
-          <p style="color:#888;font-size:12px;margin:8px 0;">Analyse raw_data/content des leads pour extraire des emails. 100% offline.</p>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Analyse raw_data/content des leads pour extraire emails, téléphones et handles sociaux. 100% offline.</p>
           <div class="filters" style="gap:8px">
             <select id="lab-extract-limit" style="padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
               <option value="500">500 leads</option>
@@ -764,8 +766,8 @@ async function loadLeadLab() {
         </div>
 
         <div class="card">
-          <h3>🧠 Enrichissement</h3>
-          <p style="color:#888;font-size:12px;margin:8px 0">Extraction email/téléphone + analyse IA du contenu.</p>
+          <h3>🧠 Enrichissement Complet</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0">Extraction email/téléphone/social + scoring intent (keyword-based) + détection langue + type source.</p>
           <div class="filters" style="gap:8px">
             <select id="lab-enrich-limit" style="padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
               <option value="50">50</option>
@@ -773,13 +775,14 @@ async function loadLeadLab() {
               <option value="500">500</option>
             </select>
             <button class="btn" onclick="runEnrich()">🧠 Enrichir</button>
+            <button class="btn-secondary" onclick="runDeepEnrich()">🔮 Deep Enrich</button>
           </div>
           <div id="lab-enrich-result" style="margin-top:8px"></div>
         </div>
 
         <div class="card">
           <h3>🌐 DNS Harvester</h3>
-          <p style="color:#888;font-size:12px;margin:8px 0;">Découvre des emails via DNS (DMARC/SOA). Fonctionne sans HTTP.</p>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Découvre des emails via DNS (SOA/DMARC/SPF/MX) + emails courants (info@, sales@, contact@) sur 1000+ domaines IPTV.</p>
           <div class="filters" style="gap:8px">
             <select id="lab-dns-count" style="padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
               <option value="25">25</option>
@@ -818,8 +821,14 @@ async function loadLeadLab() {
       <h3>📋 Derniers leads</h3>
       <div id="lab-recent-leads"></div>
     </div>
+
+    <div class="section" style="margin-top:16px">
+      <h3>🔗 Réseaux sociaux détectés</h3>
+      <div id="lab-social-leads"></div>
+    </div>
   `
   loadRecentLeads()
+  loadSocialLeads()
 }
 
 async function loadRecentLeads() {
@@ -854,6 +863,68 @@ async function runEnrich() {
     ? '<div class="alert alert-success">🧠 '+res.enriched+' enrichis!</div>'
     : '<div style="color:#666;font-size:12px;margin-top:8px">Aucun lead à enrichir</div>'
   if (res?.enriched > 0) showToast(res.enriched+' enrichis!','success')
+}
+
+async function runDeepEnrich() {
+  const btn = event.target;
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = '⏳...'
+  const res = await api('/leads/deep-enrich', { method: 'POST', body: JSON.stringify({ limit: 500 }) })
+  btn.disabled = false; btn.textContent = orig
+  $('lab-enrich-result').innerHTML = res?.updated > 0
+    ? '<div class="alert alert-success">🔮 '+res.updated+' leads deep-enrichis! (intent_score, langue, source, pain_point)</div>'
+    : '<div style="color:#666;font-size:12px;margin-top:8px">0 deep-enrichis</div>'
+  if (res?.updated > 0) showToast(res.updated+' deep-enrichis!','success')
+}
+
+async function loadSocialLeads() {
+  const container = $('lab-social-leads')
+  const data = await api('/leads/social') || {}
+  if (!data.leads?.length) {
+    container.innerHTML = '<p style="color:#666;font-size:13px">Aucun réseau social détecté</p>'
+    return
+  }
+  container.innerHTML = '<div style="overflow-x:auto"><table><tr><th>ID</th><th>Username</th><th>Email</th><th>Type</th><th>Valeur</th><th>Extrait</th></tr>' +
+    data.leads.map(l =>
+      l.socials.map(s => '<tr><td>'+l.id+'</td><td>'+(l.username||'-')+'</td><td>'+(l.email||'-')+'</td><td><span class="badge">'+s.type+'</span></td><td><code>'+s.value+'</code></td><td style="color:#888;font-size:11px">'+l.content.substring(0,80)+'</td></tr>').join('')
+    ).join('') +
+    '</table></div>'
+}
+
+async function runAllLabTools() {
+  const btn = event.target
+  btn.disabled = true; btn.textContent = '⏳ Exécution en cours...'
+  const results = {}
+
+  try {
+    // Step 1: Extract emails from raw_data
+    const extractRes = await api('/sniffers/extract-emails', { method: 'POST', body: JSON.stringify({ limit: 2000 }) })
+    results.extract = extractRes?.extracted || 0
+    showToast(`📧 Étape 1: ${results.extract} emails extraits`, results.extract > 0 ? 'success' : 'info')
+
+    // Step 2: Deep enrich
+    const enrichRes = await api('/leads/deep-enrich', { method: 'POST', body: JSON.stringify({ limit: 500 }) })
+    results.enrich = enrichRes?.updated || 0
+    showToast(`🧠 Étape 2: ${results.enrich} deep-enrichis`, results.enrich > 0 ? 'success' : 'info')
+
+    // Step 3: DNS Harvest (25)
+    const dnsRes = await api('/whois/harvest', { method: 'POST', body: JSON.stringify({ targetCount: 25, maxDomains: 100, area: 'fr', language: 'fr', checkDmarc: true }) })
+    results.dns = dnsRes?.harvested || 0
+    showToast(`🌐 Étape 3: ${results.dns} emails DNS`, results.dns > 0 ? 'success' : 'info')
+
+    // Step 4: Import from IPTV Boss
+    const iptvRes = await api('/leads/import-iptv', { method: 'POST' })
+    results.iptv = iptvRes?.imported || 0
+    showToast(`📥 Étape 4: ${results.iptv} IPTV importés`, results.iptv > 0 ? 'success' : 'info')
+
+  } catch (err) {
+    showToast('Erreur: '+err.message, 'error')
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ LANCER TOUS LES OUTILS (Run All)'
+  loadLeadLab()
+
+  const summary = `📊 Résultats: ${results.extract} emails extraits, ${results.enrich} enrichis, ${results.dns} DNS, ${results.iptv} IPTV`
+  showToast(summary, 'success')
 }
 
 async function runDnsHarvestLab() {

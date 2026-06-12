@@ -204,36 +204,107 @@ async function extractEmailsFromMX(domain) {
   return emails;
 }
 
-async function checkDomain(domain) {
-  const result = { domain, emails: [], exists: false };
+const COMMON_MAILBOXES = [
+  { prefix: 'info', score: 15, role: 'info' },
+  { prefix: 'sales', score: 20, role: 'sales' },
+  { prefix: 'contact', score: 15, role: 'contact' },
+  { prefix: 'support', score: 10, role: 'support' },
+  { prefix: 'admin', score: 10, role: 'admin' },
+  { prefix: 'webmaster', score: 5, role: 'webmaster' },
+  { prefix: 'postmaster', score: 5, role: 'postmaster' },
+  { prefix: 'hostmaster', score: 5, role: 'hostmaster' },
+  { prefix: 'abuse', score: 5, role: 'abuse' },
+  { prefix: 'newsletter', score: 15, role: 'newsletter' },
+  { prefix: 'service', score: 15, role: 'service' },
+  { prefix: 'order', score: 20, role: 'order' },
+  { prefix: 'register', score: 15, role: 'register' },
+  { prefix: 'help', score: 10, role: 'help' },
+  { prefix: 'team', score: 15, role: 'team' },
+  { prefix: 'hello', score: 10, role: 'hello' },
+  { prefix: 'care', score: 15, role: 'care' },
+  { prefix: 'message', score: 10, role: 'message' },
+  { prefix: 'business', score: 20, role: 'business' },
+  { prefix: 'partner', score: 20, role: 'partner' },
+]
+
+const SOCIAL_PATTERNS = [
+  { regex: /t\.me\/([a-zA-Z0-9_]{5,})/gi, type: 'telegram_group' },
+  { regex: /@([a-zA-Z0-9_]{5,})/g, type: 'telegram_handle' },
+  { regex: /wa\.me\/(\d+)/gi, type: 'whatsapp' },
+  { regex: /whatsapp\.com\/(\d+)/gi, type: 'whatsapp' },
+  { regex: /wa\.link\/[a-zA-Z0-9]+/gi, type: 'whatsapp' },
+  { regex: /instagram\.com\/([a-zA-Z0-9_.]+)/gi, type: 'instagram' },
+  { regex: /facebook\.com\/([a-zA-Z0-9.]+)/gi, type: 'facebook' },
+  { regex: /youtube\.com\/(@[a-zA-Z0-9_]+)/gi, type: 'youtube' },
+  { regex: /discord\.(gg|com\/invite)\/([a-zA-Z0-9]+)/gi, type: 'discord' },
+  { regex: /(?:^|\s)(\+?\d{7,15})(?:\s|$)/g, type: 'phone' },
+]
+
+function extractSocialLinks(text) {
+  if (!text) return []
+  const found = []
+  for (const pattern of SOCIAL_PATTERNS) {
+    const matches = [...text.matchAll(pattern.regex)]
+    for (const m of matches) {
+      const handle = m[m.length - 1] || m[0]
+      if (handle && !handle.startsWith('@') && pattern.type === 'telegram_handle' && m[0].startsWith('@')) continue // already handled
+      if (handle && !['http', 'www', 'example', 'test'].some(t => handle.toLowerCase().includes(t))) {
+        found.push({ type: pattern.type, value: handle, original: m[0] })
+      }
+    }
+  }
+  return found
+}
+
+async function checkCommonEmails(domain, mxRecords) {
+  const results = []
+  if (mxRecords.length === 0) return results
   
-  // Check if domain has any DNS records (A, AAAA, MX, NS)
+  for (const mailbox of COMMON_MAILBOXES) {
+    results.push({
+      email: `${mailbox.prefix}@${domain}`,
+      score: mailbox.score,
+      role: mailbox.role,
+      method: 'common_mailbox'
+    })
+  }
+  return results
+}
+
+async function checkDomain(domain) {
+  const result = { domain, emails: [], exists: false, mx_records: [] };
+  
   try {
     const a = await dns.resolve4(domain).catch(() => []);
     const aaaa = await dns.resolve6(domain).catch(() => []);
     const mx = await dns.resolveMx(domain).catch(() => []);
     const ns = await dns.resolveNs(domain).catch(() => []);
     result.exists = a.length > 0 || aaaa.length > 0 || mx.length > 0 || ns.length > 0;
+    result.mx_records = mx.map(m => m.exchange);
     
-    // Extract emails from DNS records
     const soaEmails = await extractEmailsFromSOA(domain);
-    result.emails.push(...soaEmails);
+    result.emails.push(...soaEmails.map(e => ({ email: e, score: 70, role: 'admin', method: 'soa' })));
     
     const dmarcEmails = await extractEmailsFromDMARC(domain);
-    result.emails.push(...dmarcEmails);
+    result.emails.push(...dmarcEmails.map(e => ({ email: e, score: 60, role: 'admin', method: 'dmarc' })));
     
     if (result.emails.length === 0) {
       const spfEmails = await extractEmailsFromSPF(domain);
-      result.emails.push(...spfEmails);
+      result.emails.push(...spfEmails.map(e => ({ email: e, score: 50, role: 'admin', method: 'spf' })));
     }
     
     if (result.emails.length === 0 && mx.length > 0) {
       const mxEmails = await extractEmailsFromMX(domain);
-      result.emails.push(...mxEmails);
+      result.emails.push(...mxEmails.map(e => ({ email: e, score: 40, role: 'admin', method: 'mx' })));
+    }
+    
+    if (mx.length > 0) {
+      const commonEmails = await checkCommonEmails(domain, mx);
+      result.emails.push(...commonEmails);
     }
   } catch(e) {}
 
-  result.emails = [...new Set(result.emails)];
+  result.emails = [...new Map(result.emails.map(e => [e.email, e])).values()];
   return result;
 }
 
@@ -318,15 +389,19 @@ async function runHarvest(config = {}) {
       checked++;
       
       let batchHarvested = 0;
-      for (const email of info.emails) {
-        if (existing.has(email)) continue;
-        existing.add(email);
-        const domain_ = email.split('@')[1];
+      for (const entry of info.emails) {
+        const emailStr = typeof entry === 'string' ? entry : entry.email
+        const score = typeof entry === 'string' ? 70 : entry.score
+        const role = typeof entry === 'string' ? 'admin' : entry.role
+        
+        if (existing.has(emailStr)) continue;
+        existing.add(emailStr);
+        const domain_ = emailStr.split('@')[1];
         const lang = domain_ && ['.fr', '.be', '.ch', '.re'].some(s => domain_.endsWith(s)) ? 'fr' : language;
         try {
           const info2 = stmt.run(
-            email, 'dns_harvester', `dns_${info.domain}`,
-            lang, 70,
+            emailStr, 'dns_harvester', `dns_${info.domain}`,
+            lang, score,
             new Date().toISOString(), new Date().toISOString()
           );
           if (info2.changes > 0) batchHarvested++;
@@ -337,7 +412,7 @@ async function runHarvest(config = {}) {
       if (batchHarvested > 0) {
         results.domains_with_emails.push({
           domain: info.domain,
-          emails: info.emails,
+          emails: info.emails.map(e => typeof e === 'string' ? e : `${e.email} (${e.role}, score:${e.score})`),
           exists: info.exists,
           harvested: batchHarvested
         });

@@ -224,4 +224,35 @@ router.post('/import-csv', authMiddleware, (req, res) => {
   res.json({ imported: result.imported, skipped: result.skipped, total: lines.length - 1 })
 })
 
+router.post('/deep-enrich', authMiddleware, async (req, res) => {
+  const { limit = 100 } = req.body
+  const enrichment = require('../services/leadEnrichment')
+  try {
+    const updated = await enrichment.deepEnrichAll(Math.min(limit, 500))
+    res.json({ updated })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.get('/social', authMiddleware, (req, res) => {
+  const db = getDb()
+  const leads = db.prepare(`
+    SELECT id, username, email, content, raw_data FROM leads
+    WHERE (raw_data LIKE '%t.me%' OR raw_data LIKE '%wa.me%' OR raw_data LIKE '%instagram%' OR raw_data LIKE '%discord%' OR content LIKE '%@%')
+    ORDER BY intent_score DESC LIMIT 200
+  `).all()
+
+  const enrichment = require('../services/leadEnrichment')
+  const socialLeads = leads.map(l => ({
+    id: l.id,
+    username: l.username,
+    email: l.email,
+    socials: enrichment.extractSocialHandles([l.content, l.raw_data].filter(Boolean).join(' ')),
+    content: (l.content || '').substring(0, 200)
+  })).filter(l => l.socials.length > 0)
+
+  res.json({ total: socialLeads.length, leads: socialLeads })
+})
+
 module.exports = router
