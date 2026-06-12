@@ -266,4 +266,4 @@ async function ensureTemplates() {
   }
 }
 
-module.exports = { getLeadsForBatch, sendBulkEmails, ensureTemplates, TEMPLATES, BATCH_SIZES };
+module.exports = { getLeadsForBatch, sendBulkEmails, ensureTemplates, getDailyCount, getBrevoLimit, TEMPLATES, BATCH_SIZES };
