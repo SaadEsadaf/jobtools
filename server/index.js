@@ -23,6 +23,7 @@ const thesisRoutes = require('./routes/thesis')
 const snifferRoutes = require('./routes/sniffers')
 const marketingRoutes = require('./routes/marketing')
 const whoisRoutes = require('./routes/whoisMiner')
+const ticketRoutes = require('./routes/tickets')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/stats', statsRoutes)
@@ -37,6 +38,7 @@ app.use('/api/thesis', thesisRoutes)
 app.use('/api/sniffers', snifferRoutes)
 app.use('/api/marketing', marketingRoutes)
 app.use('/api/whois', whoisRoutes)
+app.use('/api/tickets', ticketRoutes)
 
 // Start background scheduler
 const { startScheduler } = require('./services/scheduler')
