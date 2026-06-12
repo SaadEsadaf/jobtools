@@ -148,6 +148,7 @@
       <div class="subtitle">Environnement marketing indépendant lié à IPTV-Boss</div>
     </div>
     <div class="topbar-right">
+      <select id="websiteSelector" style="display:none;padding:6px 10px;background:#0d0d0d;border:1px solid #3a3a3a;border-radius:6px;color:#ccc;font-size:12px;max-width:180px" onchange="onWebsiteChange(this.value)"></select>
       <span class="user" id="userDisplay"></span>
       <button onclick="doLogout()">Déconnexion</button>
     </div>
@@ -169,6 +170,7 @@
     <button data-tab="tickets">🎫 Tickets</button>
     <button data-tab="leadlab">🔬 Lead Lab</button>
     <button data-tab="whois">🌐 WHOIS</button>
+    <button data-tab="blogs">📝 Blogs</button>
     <button data-tab="settings">⚙️ Paramètres</button>
   </div>
 
@@ -188,6 +190,7 @@
     <div class="tab-content" id="tab-tickets"></div>
     <div class="tab-content" id="tab-leadlab"></div>
     <div class="tab-content" id="tab-whois"></div>
+    <div class="tab-content" id="tab-blogs"></div>
     <div class="tab-content" id="tab-settings"></div>
   </div>
 </div>
@@ -228,8 +231,31 @@ function doLogout() { TOKEN = ''; USER = null; localStorage.removeItem('jobtools
 
 if (TOKEN && USER) { $('loginPage').style.display = 'none'; $('app').classList.add('active'); initApp() }
 
+let CURRENT_WEBSITE_ID = null
+let CURRENT_WEBSITE = null
+
+async function loadWebsiteSelector() {
+  const websites = await api('/blogs/websites')
+  if (!websites || !websites.length) return
+  const sel = $('websiteSelector')
+  sel.innerHTML = websites.map(w => `<option value="${w.id}">${w.site_name || w.name}</option>`).join('')
+  sel.style.display = ''
+  CURRENT_WEBSITE_ID = websites[0].id
+  CURRENT_WEBSITE = websites[0]
+  sel.value = CURRENT_WEBSITE_ID
+}
+
+async function onWebsiteChange(id) {
+  CURRENT_WEBSITE_ID = parseInt(id)
+  const websites = await api('/blogs/websites')
+  CURRENT_WEBSITE = websites.find(w => w.id === CURRENT_WEBSITE_ID)
+  // If blogs tab is active, reload
+  if (document.querySelector('[data-tab="blogs"]')?.classList.contains('active')) loadBlogs()
+}
+
 function initApp() {
   $('userDisplay').textContent = USER?.username || 'admin'
+  loadWebsiteSelector()
   document.querySelectorAll('#navTabs button').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('#navTabs button').forEach(b => b.classList.remove('active'))
@@ -276,6 +302,7 @@ function loadTab(name) {
   else if (name === 'tickets') loadTickets()
   else if (name === 'leadlab') loadLeadLab()
   else if (name === 'whois') loadWhois()
+  else if (name === 'blogs') loadBlogs()
   else if (name === 'settings') loadSettings()
 }
 
@@ -2406,6 +2433,247 @@ async function loadKillChain() {
       <div style="margin-top:4px;padding:8px;background:#0d0d0d;border-radius:4px;color:#4fc3f7;font-size:11px">📦 ${s.result}</div>
     </div>
   `).join('')
+}
+
+// ==================== BLOGS ====================
+async function loadBlogs() {
+  const container = $('tab-blogs')
+  const websites = await api('/blogs/websites')
+  const topicsRes = await api('/blogs/topics')
+  const allTopics = topicsRes || []
+
+  if (!websites || websites.length === 0) {
+    container.innerHTML = `
+      <div class="section">
+        <h2>Gestion des Sites Web</h2>
+        <div class="alert alert-info">Aucun site web. Ajoutez-en un pour commencer à générer du contenu blog.</div>
+        <button class="btn" onclick="showWebsiteModal()">➕ Ajouter un site</button>
+      </div>`
+    return
+  }
+
+  let html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-size:18px;color:#fff;margin:0">📝 Blogs & SEO</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="showWebsiteModal()">🌐 Sites</button>
+      </div>
+    </div>`
+
+  // Website management cards
+  html += `<div class="section">
+    <h2>Sites Web <span class="badge">${websites.length}</span></h2>
+    <div class="flex">`
+  for (const w of websites) {
+    const isCurrent = w.id === CURRENT_WEBSITE_ID
+    const postsRes = await api('/blogs/websites/' + w.id + '/posts')
+    const postCount = postsRes ? postsRes.length : 0
+    const publishedCount = postsRes ? postsRes.filter(p => p.published).length : 0
+    html += `<div class="card" style="${isCurrent ? 'border-color:#e94560;' : ''}">
+      <h3>${w.site_name || w.name} ${isCurrent ? '<span style="color:#e94560;font-size:11px">✓ actif</span>' : ''}</h3>
+      <p>${w.domain}</p>
+      <div class="meta">${postCount} articles · ${publishedCount} publiés · ${w.language}</div>
+      <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">
+        ${!isCurrent ? `<button class="btn btn-sm btn-secondary" onclick="switchWebsite(${w.id})">Utiliser</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="editWebsiteModal(${w.id})">✏️</button>
+        <button class="btn btn-sm btn-secondary" onclick="deleteWebsite(${w.id})">🗑️</button>
+      </div>
+    </div>`
+  }
+  html += `</div></div>`
+
+  // Current website blog management
+  if (CURRENT_WEBSITE) {
+    const w = CURRENT_WEBSITE
+    const posts = await api('/blogs/websites/' + w.id + '/posts') || []
+
+    html += `<div class="section">
+      <h2>📄 Articles — ${w.site_name || w.name} <span class="badge">${posts.length}</span></h2>`
+
+    // Topics grid for generation
+    html += `<div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="color:#ccc;font-size:14px">Sujets SEO disponibles</h3>
+        <button class="btn btn-sm btn-success" onclick="generateAllForWebsite()">⚡ Tout générer</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">`
+    for (const t of allTopics) {
+      const exists = posts.find(p => p.slug === t.slug)
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:${exists ? '#1b5e2020' : '#151515'};border-radius:6px;font-size:12px">
+        <span style="color:${exists ? '#81c784' : '#aaa'}">${exists ? '✅' : '⏳'} ${t.topic}</span>
+        ${exists ? `<span style="color:#666;font-size:11px">${exists.published ? 'publié' : 'brouillon'}</span>`
+          : `<button class="btn btn-sm" style="padding:2px 8px;font-size:10px" onclick="generateTopic('${t.slug}')">Générer</button>`}
+      </div>`
+    }
+    html += `</div></div>`
+
+    // Posts table
+    if (posts.length > 0) {
+      html += `<h3 style="color:#ccc;font-size:14px;margin-bottom:8px">Articles générés</h3>
+      <table><tr><th>Titre</th><th>Sujet</th><th>Langue</th><th>Date</th><th>Statut</th><th></th></tr>`
+      for (const p of posts) {
+        html += `<tr>
+          <td><strong>${escHtml(p.title)}</strong></td>
+          <td style="color:#888;font-size:11px">${p.topic || ''}</td>
+          <td>${p.language}</td>
+          <td style="color:#666;font-size:11px">${p.created_at || ''}</td>
+          <td>${p.published ? '<span style="color:#81c784">✅ Publié</span>' : '<span style="color:#ffb74d">⬜ Brouillon</span>'}</td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="togglePublish(${w.id},${p.id},${p.published ? 0 : 1})">${p.published ? 'Dépublier' : 'Publier'}</button>
+            <button class="btn btn-sm btn-secondary" onclick="viewPost(${w.id},${p.id})">👁️</button>
+            <button class="btn btn-sm btn-secondary" onclick="deletePost(${w.id},${p.id})">🗑️</button>
+          </td>
+        </tr>`
+      }
+      html += `</table>`
+    }
+
+    html += `</div>`
+  }
+
+  container.innerHTML = html
+}
+
+function switchWebsite(id) {
+  const sel = $('websiteSelector')
+  sel.value = id
+  onWebsiteChange(id)
+}
+
+function escHtml(s) { if (!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+function showWebsiteModal() {
+  const overlay = document.createElement('div')
+  overlay.className = 'modal-overlay active'
+  overlay.id = 'websiteModal'
+  overlay.innerHTML = `<div class="modal">
+    <h2>🌐 Ajouter un site web</h2>
+    <label>Nom</label><input id="wsName" placeholder="Mon Site IPTV">
+    <label>Domaine</label><input id="wsDomain" placeholder="monsite.com">
+    <label>Slug (identifiant unique)</label><input id="wsSlug" placeholder="mon-site">
+    <label>Langue</label>
+    <select id="wsLang"><option value="fr">Français</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option><option value="ar">العربية</option></select>
+    <label>Nom du site (affiché)</label><input id="wsSiteName" placeholder="">
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="document.getElementById('websiteModal').remove()">Annuler</button>
+      <button class="btn" onclick="saveWebsite()">Ajouter</button>
+    </div>
+  </div>`
+  document.body.appendChild(overlay)
+}
+
+async function saveWebsite() {
+  const name = $('wsName').value
+  const domain = $('wsDomain').value
+  const slug = $('wsSlug').value
+  const language = $('wsLang').value
+  const site_name = $('wsSiteName').value
+  if (!name || !domain || !slug) return showToast('Nom, domaine et slug requis', 'error')
+  const res = await api('/blogs/websites', { method: 'POST', body: JSON.stringify({ name, domain, slug, site_name, language }) })
+  if (!res || res.error) return showToast(res?.error || 'Erreur', 'error')
+  document.getElementById('websiteModal').remove()
+  showToast('Site ajouté')
+  loadWebsiteSelector()
+  loadBlogs()
+}
+
+function editWebsiteModal(id) {
+  api('/blogs/websites').then(websites => {
+    const w = websites.find(x => x.id === id)
+    if (!w) return
+    const overlay = document.createElement('div')
+    overlay.className = 'modal-overlay active'
+    overlay.innerHTML = `<div class="modal">
+      <h2>✏️ Modifier le site</h2>
+      <label>Nom</label><input id="wsName" value="${escHtml(w.name)}">
+      <label>Domaine</label><input id="wsDomain" value="${escHtml(w.domain)}">
+      <label>Slug</label><input id="wsSlug" value="${escHtml(w.slug)}">
+      <label>Langue</label><select id="wsLang"><option value="fr" ${w.language==='fr'?'selected':''}>Français</option><option value="en" ${w.language==='en'?'selected':''}>English</option><option value="de" ${w.language==='de'?'selected':''}>Deutsch</option><option value="es" ${w.language==='es'?'selected':''}>Español</option><option value="ar" ${w.language==='ar'?'selected':''}>العربية</option></select>
+      <label>Nom du site</label><input id="wsSiteName" value="${escHtml(w.site_name || '')}">
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Annuler</button>
+        <button class="btn" onclick="updateWebsite(${id})">Enregistrer</button>
+      </div>
+    </div>`
+    document.body.appendChild(overlay)
+  })
+}
+
+async function updateWebsite(id) {
+  const name = $('wsName').value
+  const domain = $('wsDomain').value
+  const slug = $('wsSlug').value
+  const language = $('wsLang').value
+  const site_name = $('wsSiteName').value
+  const res = await api('/blogs/websites/' + id, { method: 'PUT', body: JSON.stringify({ name, domain, slug, site_name, language }) })
+  if (!res || res.error) return showToast(res?.error || 'Erreur', 'error')
+  document.querySelector('.modal-overlay').remove()
+  showToast('Site modifié')
+  loadWebsiteSelector()
+  loadBlogs()
+}
+
+async function deleteWebsite(id) {
+  if (!confirm('Supprimer ce site et tous ses articles ?')) return
+  await api('/blogs/websites/' + id, { method: 'DELETE' })
+  if (CURRENT_WEBSITE_ID === id) { CURRENT_WEBSITE_ID = null; CURRENT_WEBSITE = null }
+  showToast('Site supprimé')
+  loadWebsiteSelector()
+  loadBlogs()
+}
+
+async function generateTopic(slug) {
+  const res = await api('/blogs/websites/' + CURRENT_WEBSITE_ID + '/generate', { method: 'POST', body: JSON.stringify({ topic: slug }) })
+  if (!res || res.error) return showToast(res?.error || 'Erreur de génération', 'error')
+  showToast(res.existing ? 'Déjà existant' : '✅ Article généré !')
+  loadBlogs()
+}
+
+async function generateAllForWebsite() {
+  const btn = event.target
+  btn.disabled = true
+  btn.textContent = '⏳ Génération en cours...'
+  const res = await api('/blogs/websites/' + CURRENT_WEBSITE_ID + '/generate-all', { method: 'POST' })
+  if (!res) { btn.disabled = false; btn.textContent = '⚡ Tout générer'; return }
+  showToast(`✅ ${res.generated} générés, ${res.failed} échecs sur ${res.total}`)
+  btn.disabled = false
+  btn.textContent = '⚡ Tout générer'
+  loadBlogs()
+}
+
+async function togglePublish(websiteId, postId, publish) {
+  await api('/blogs/websites/' + websiteId + '/posts/' + postId, { method: 'PUT', body: JSON.stringify({ published: publish }) })
+  loadBlogs()
+}
+
+async function deletePost(websiteId, postId) {
+  if (!confirm('Supprimer cet article ?')) return
+  await api('/blogs/websites/' + websiteId + '/posts/' + postId, { method: 'DELETE' })
+  showToast('Article supprimé')
+  loadBlogs()
+}
+
+function viewPost(websiteId, postId) {
+  api('/blogs/websites/' + websiteId + '/posts/' + postId).then(post => {
+    if (!post) return
+    const overlay = document.createElement('div')
+    overlay.className = 'modal-overlay active'
+    overlay.innerHTML = `<div class="modal" style="max-width:700px">
+      <h2>${escHtml(post.title)}</h2>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <span style="background:#2a2a2a;padding:2px 8px;border-radius:4px;font-size:11px">${post.language}</span>
+        <span style="background:#2a2a2a;padding:2px 8px;border-radius:4px;font-size:11px">${post.published ? 'Publié' : 'Brouillon'}</span>
+        <span style="background:#2a2a2a;padding:2px 8px;border-radius:4px;font-size:11px">${post.topic || ''}</span>
+      </div>
+      <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:8px;padding:16px;max-height:400px;overflow-y:auto;font-size:13px;color:#ccc;line-height:1.6">
+        ${post.content || post.excerpt || ''}
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Fermer</button>
+      </div>
+    </div>`
+    document.body.appendChild(overlay)
+  })
 }
 
 </script>

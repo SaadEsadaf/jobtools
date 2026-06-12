@@ -172,7 +172,57 @@ function migrate() {
       error TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS websites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      domain TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      site_name TEXT DEFAULT '',
+      language TEXT DEFAULT 'fr',
+      logo_url TEXT DEFAULT '',
+      settings TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS blog_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      website_id INTEGER NOT NULL,
+      slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      excerpt TEXT DEFAULT '',
+      content TEXT DEFAULT '',
+      language TEXT DEFAULT 'fr',
+      keywords TEXT DEFAULT '[]',
+      topic TEXT DEFAULT '',
+      published INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (website_id) REFERENCES websites(id),
+      UNIQUE(website_id, slug)
+    );
   `)
+}
+
+function seed() {
+  const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c
+  if (userCount === 0) {
+    const hash = bcrypt.hashSync('admin123', 10)
+    db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run('admin', hash)
+  }
+  const brainUrl = db.prepare("SELECT value FROM app_settings WHERE key = 'iptv_boss_url'").get()
+  if (!brainUrl) {
+    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('iptv_boss_url', 'http://localhost:3001')
+    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('iptv_boss_token', '')
+    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('site_domain', 'dalletek.live')
+  }
+  // Seed default website
+  const existing = db.prepare('SELECT COUNT(*) as c FROM websites').get().c
+  if (existing === 0) {
+    db.prepare("INSERT INTO websites (name, domain, slug, site_name, language) VALUES (?, ?, ?, ?, ?)")
+      .run('Dalletek', 'dalletek.live', 'dalletek', 'Dalletek', 'fr')
+  }
 }
 
 function seed() {
