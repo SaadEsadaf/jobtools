@@ -2,6 +2,7 @@ const express = require('express');
 const { getDb } = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const domainHarvester = require('../services/domainHarvester');
+const whoisService = require('../services/whoisMiner');
 
 const router = express.Router();
 
@@ -66,6 +67,24 @@ router.post('/check/:domain', authMiddleware, async (req, res) => {
 router.get('/domains', authMiddleware, (req, res) => {
   const domains = domainHarvester.generateDomainList();
   res.json({ total: domains.length, domains: domains.slice(0, 100) });
+});
+
+router.post('/mine', authMiddleware, async (req, res) => {
+  req.setTimeout(0);
+  try {
+    const maxDomains = Math.min(parseInt(req.body.maxDomains) || 500, 2000);
+    const results = await whoisService.runMine(maxDomains);
+    res.json({
+      mode: 'whois_miner',
+      checked: results.checked,
+      found: results.found,
+      harvested: results.harvested,
+      errors: results.errors,
+      domains_with_emails: results.domains_with_emails.slice(0, 30)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

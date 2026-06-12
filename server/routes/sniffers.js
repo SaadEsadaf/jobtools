@@ -6,7 +6,7 @@ const { sniffTwitter, discoverTwitterSources } = require('../services/twitterSni
 const { sniffReddit, discoverRedditSources } = require('../services/redditSniffer')
 const ytSniffer = require('../services/youtubeSniffer')
 const webSniffer = require('../services/webSniffer')
-const { enrichStaleLeads } = require('../services/leadEnrichment')
+const { enrichStaleLeads, extractAllFromRawData } = require('../services/leadEnrichment')
 const { generate } = require('../services/aiProvider')
 
 const router = express.Router()
@@ -154,6 +154,17 @@ router.post('/enrich', authMiddleware, async (req, res) => {
   try {
     const count = await enrichStaleLeads(req.body.limit || 20)
     res.json({ enriched: count })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/extract-emails', authMiddleware, async (req, res) => {
+  req.setTimeout(0)
+  try {
+    const limit = Math.min(parseInt(req.body.limit) || 500, 5000)
+    const result = await extractAllFromRawData(limit)
+    res.json({ scanned: result.scanned, extracted: result.extracted })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -1,4 +1,17 @@
 const dns = require('dns').promises;
+const { getDb } = require('../db');
+
+function isDuplicate(email) {
+  const db = getDb();
+  const existing = db.prepare("SELECT id FROM leads WHERE email = ? AND email != ''").get(email.toLowerCase().trim());
+  return !!existing;
+}
+
+function isDuplicateInText(email, existingSet = null) {
+  const key = email.toLowerCase().trim();
+  if (existingSet) return existingSet.has(key);
+  return isDuplicate(key);
+}
 
 const DISPOSABLE_DOMAINS = new Set([
   'mailinator.com', 'guerrillamail.com', 'sharklasers.com', 'grr.la',
@@ -46,6 +59,8 @@ function scoreEmail(email, source, sourceMeta = {}) {
   if (!validateSyntax(email)) return { valid: false, score: 0, priority: 5, reasons: ['invalid_syntax'] };
 
   if (isDisposable(email)) return { valid: false, score: 0, priority: 5, reasons: ['disposable'] };
+
+  if (isDuplicate(email)) return { valid: false, score: 0, priority: 5, reasons: ['duplicate'] };
 
   if (source === 'dns_harvester' && sourceMeta.domain) {
     score += 25;

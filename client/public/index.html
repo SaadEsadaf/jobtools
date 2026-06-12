@@ -167,6 +167,7 @@
     <button data-tab="automations">⚡ Automations</button>
     <button data-tab="thesis">🎓 Thesis Demo</button>
     <button data-tab="tickets">🎫 Tickets</button>
+    <button data-tab="leadlab">🔬 Lead Lab</button>
     <button data-tab="whois">🌐 WHOIS</button>
     <button data-tab="settings">⚙️ Paramètres</button>
   </div>
@@ -185,6 +186,7 @@
     <div class="tab-content" id="tab-automations"></div>
     <div class="tab-content" id="tab-thesis"></div>
     <div class="tab-content" id="tab-tickets"></div>
+    <div class="tab-content" id="tab-leadlab"></div>
     <div class="tab-content" id="tab-whois"></div>
     <div class="tab-content" id="tab-settings"></div>
   </div>
@@ -272,6 +274,7 @@ function loadTab(name) {
   else if (name === 'automations') loadAutomations()
   else if (name === 'thesis') loadThesis()
   else if (name === 'tickets') loadTickets()
+  else if (name === 'leadlab') loadLeadLab()
   else if (name === 'whois') loadWhois()
   else if (name === 'settings') loadSettings()
 }
@@ -717,6 +720,195 @@ async function syncBrain() {
   const res = await api('/brain/sync', { method: 'POST' })
   if (res?.synced) showToast('Synchronisé avec IPTV-Boss!')
   loadBrain()
+}
+
+// ==================== LEAD LAB ====================
+async function loadLeadLab() {
+  const container = $('tab-leadlab')
+  const stats = await api('/leads/stats') || {}
+  const snifferStats = await api('/sniffers/stats') || {}
+  container.innerHTML = `
+    <div class="section">
+      <h2>🔬 Lead Lab</h2>
+      <div class="alert alert-info">Outils de génération de leads qui FONCTIONNENT sans HTTP sortant.</div>
+
+      <div class="stats-grid" style="margin-bottom:16px">
+        <div class="stat-card"><div class="value">${stats.total || 0}</div><div class="label">📊 Total Leads</div></div>
+        <div class="stat-card"><div class="value" style="color:#81c784">${stats.withEmail || 0}</div><div class="label">📧 Avec email</div></div>
+        <div class="stat-card"><div class="value" style="color:#ff6b35">${(stats.total || 0) - (stats.withEmail || 0)}</div><div class="label">🔴 Sans email</div></div>
+        <div class="stat-card"><div class="value">${snifferStats.leadsToday || 0}</div><div class="label">📅 Aujourd'hui</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+
+        <div class="card">
+          <h3>📥 Importer d'IPTV-Boss</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Importe les utilisateurs et leads depuis la base IPTV-Boss locale.</p>
+          <button class="btn" onclick="importFromIPTV()" id="lab-import-btn">📥 Importer IPTV-Boss</button>
+          <div id="lab-import-result" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <h3>📧 Extraction d'emails (raw_data)</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Analyse raw_data/content des leads pour extraire des emails. 100% offline.</p>
+          <div class="filters" style="gap:8px">
+            <select id="lab-extract-limit" style="padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
+              <option value="500">500 leads</option>
+              <option value="1000" selected>1000</option>
+              <option value="2000">2000</option>
+              <option value="5000">5000</option>
+            </select>
+            <button class="btn" onclick="runExtractEmails()">🔍 Extraire</button>
+          </div>
+          <div id="lab-extract-result" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <h3>🧠 Enrichissement</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0">Extraction email/téléphone + analyse IA du contenu.</p>
+          <div class="filters" style="gap:8px">
+            <select id="lab-enrich-limit" style="padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
+              <option value="50">50</option>
+              <option value="200" selected>200</option>
+              <option value="500">500</option>
+            </select>
+            <button class="btn" onclick="runEnrich()">🧠 Enrichir</button>
+          </div>
+          <div id="lab-enrich-result" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <h3>🌐 DNS Harvester</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Découvre des emails via DNS (DMARC/SOA). Fonctionne sans HTTP.</p>
+          <div class="filters" style="gap:8px">
+            <select id="lab-dns-count" style="padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
+            <button class="btn" onclick="runDnsHarvestLab()">🚀 Lancer DNS</button>
+          </div>
+          <div id="lab-dns-result" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <h3>📁 Import CSV/JSON</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Importe une liste d'emails/leads depuis CSV, JSON ou texte.</p>
+          <button class="btn" onclick="document.getElementById('lab-file-input').click()">📂 Choisir fichier</button>
+          <input id="lab-file-input" type="file" accept=".csv,.json,.txt" style="display:none" onchange="importFile(event)">
+          <div id="lab-file-result" style="margin-top:8px"></div>
+          <textarea id="lab-csv-text" placeholder="Ou collez CSV ici:&#10;email,source&#10;test@example.com,manual" style="width:100%;min-height:60px;margin-top:8px;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:12px;font-family:monospace"></textarea>
+          <button class="btn-secondary" onclick="importCsvText()" style="margin-top:6px;width:100%">📥 Importer texte</button>
+        </div>
+
+        <div class="card">
+          <h3>📤 Export CSV</h3>
+          <p style="color:#888;font-size:12px;margin:8px 0;">Exporte les leads en CSV pour campagne email.</p>
+          <div class="filters" style="gap:8px">
+            <button class="btn" onclick="exportLeadsCSV()">📤 Exporter tout</button>
+            <button class="btn-secondary" onclick="exportEmailsOnly()">📧 Emails only</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:16px">
+      <h3>📋 Derniers leads</h3>
+      <div id="lab-recent-leads"></div>
+    </div>
+  `
+  loadRecentLeads()
+}
+
+async function loadRecentLeads() {
+  const data = await api('/leads?limit=10') || {}
+  const container = $('lab-recent-leads')
+  if (!data.leads?.length) {
+    container.innerHTML = '<p style="color:#666;font-size:13px">Aucun lead</p>'
+    return
+  }
+  container.innerHTML = '<table><tr><th>ID</th><th>Email</th><th>Source</th><th>Langue</th><th>Score</th><th>Date</th></tr>' +
+    data.leads.map(l => '<tr><td>'+l.id+'</td><td>'+(l.email||'-')+'</td><td>'+(l.source||'-')+'</td><td>'+(l.language||'-')+'</td><td>'+(l.intent_score||'-')+'</td><td>'+new Date(l.created_at).toLocaleDateString()+'</td></tr>').join('') +
+    '</table>'
+}
+
+async function runExtractEmails() {
+  const btn = event.target; const limit = $('lab-extract-limit').value
+  btn.disabled = true; btn.textContent = '⏳...'
+  const res = await api('/sniffers/extract-emails', { method: 'POST', body: JSON.stringify({ limit: parseInt(limit) }) })
+  btn.disabled = false; btn.textContent = '🔍 Extraire'
+  $('lab-extract-result').innerHTML = res?.extracted > 0
+    ? '<div class="alert alert-success">📧 '+res.extracted+' emails extraits! (scanné: '+res.scanned+')</div>'
+    : '<div style="color:#666;font-size:12px;margin-top:8px">Aucun email trouvé (scanné: '+(res?.scanned||0)+')</div>'
+  if (res?.extracted > 0) { loadLeadLab(); showToast(res.extracted+' emails extraits!','success') }
+}
+
+async function runEnrich() {
+  const btn = event.target; const limit = $('lab-enrich-limit').value
+  btn.disabled = true; btn.textContent = '⏳...'
+  const res = await api('/sniffers/enrich', { method: 'POST', body: JSON.stringify({ limit: parseInt(limit) }) })
+  btn.disabled = false; btn.textContent = '🧠 Enrichir'
+  $('lab-enrich-result').innerHTML = res?.enriched > 0
+    ? '<div class="alert alert-success">🧠 '+res.enriched+' enrichis!</div>'
+    : '<div style="color:#666;font-size:12px;margin-top:8px">Aucun lead à enrichir</div>'
+  if (res?.enriched > 0) showToast(res.enriched+' enrichis!','success')
+}
+
+async function runDnsHarvestLab() {
+  const btn = event.target; const count = $('lab-dns-count').value
+  btn.disabled = true; btn.textContent = '⏳ DNS...'
+  const res = await api('/whois/harvest', { method: 'POST', body: JSON.stringify({ targetCount: parseInt(count), maxDomains: parseInt(count)*4, area:'all', language:'fr', checkDmarc:true }) })
+  btn.disabled = false; btn.textContent = '🚀 Lancer DNS'
+  $('lab-dns-result').innerHTML = res?.harvested > 0
+    ? '<div class="alert alert-success">📧 '+res.harvested+' emails DNS importés!</div>'
+    : '<div style="color:#666;font-size:12px;margin-top:8px">Aucun email DNS (vérifié: '+(res?.domains_checked||0)+')</div>'
+  if (res?.harvested > 0) showToast(res.harvested+' emails DNS!','success')
+}
+
+function importFile(event) {
+  const file = event.target.files[0]; if (!file) return
+  const reader = new FileReader()
+  reader.onload = async function(e) {
+    const content = e.target.result; const ext = file.name.split('.').pop().toLowerCase()
+    if (ext === 'csv') await importCsvContent(content)
+    else if (ext === 'json') {
+      try { const items = JSON.parse(content); await importJsonItems(Array.isArray(items)?items:[items]) }
+      catch { showToast('JSON invalide','error') }
+    } else {
+      const emails = content.split('\n').map(l=>l.trim()).filter(l=>l&&l.includes('@'))
+      await importJsonItems(emails.map(e=>({email:e,source:'file_import'})))
+    }
+  }; reader.readAsText(file)
+}
+
+async function importCsvText() {
+  const csv = $('lab-csv-text').value.trim()
+  if (!csv) return showToast('Collez du CSV','error')
+  await importCsvContent(csv)
+}
+
+async function importCsvContent(csv) {
+  const res = await api('/leads/import-csv',{method:'POST',body:JSON.stringify({csv})})
+  $('lab-file-result').innerHTML = res?.imported > 0
+    ? '<div class="alert alert-success">📥 '+res.imported+' importés, '+(res.skipped||0)+' ignorés</div>'
+    : '<div style="color:#666;font-size:12px;margin-top:8px">0 importés</div>'
+  $('lab-csv-text').value = ''
+  if (res?.imported > 0) { loadLeadLab(); showToast(res.imported+' importés!','success') }
+}
+
+async function importJsonItems(items) {
+  const res = await api('/leads/import-json',{method:'POST',body:JSON.stringify({items})})
+  $('lab-file-result').innerHTML = res?.imported > 0
+    ? '<div class="alert alert-success">📥 '+res.imported+' importés, '+(res.skipped||0)+' ignorés</div>'
+    : '<div style="color:#666;font-size:12px;margin-top:8px">0 importés</div>'
+  if (res?.imported > 0) { loadLeadLab(); showToast(res.imported+' importés!','success') }
+}
+
+function exportEmailsOnly() {
+  const a = document.createElement('a'); a.href = API+'/leads/export'; a.download = 'leads-'+Date.now()+'.csv'; a.click()
+  showToast('Export téléchargé!')
 }
 
 // ==================== DOMAIN HARVESTER ====================

@@ -1,22 +1,41 @@
 const { getDb } = require('../db')
 const { generate } = require('./aiProvider')
 
+const EMAIL_RE = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/g
+const PHONE_RE = /\+\d{7,15}/g
+const LOCAL_PHONE_RE = /0[1-9]\d{8,10}/g
+
+function extractEmails(text) {
+  if (!text) return []
+  const matches = [...text.matchAll(EMAIL_RE)]
+  return [...new Set(matches.map(m => m[1].toLowerCase().trim()))]
+}
+
+function extractPhones(text) {
+  if (!text) return []
+  const matches = [...text.matchAll(PHONE_RE)]
+  if (matches.length > 0) return [...new Set(matches.map(m => m[0]))]
+  const localMatches = [...text.matchAll(LOCAL_PHONE_RE)]
+  return [...new Set(localMatches.map(m => m[0]))]
+}
+
 async function enrichLead(lead) {
   let enriched = false
+  const textToSearch = [lead.content, lead.raw_data, lead.username, lead.first_name, lead.last_name].filter(Boolean).join(' ')
 
-  if (!lead.email && lead.content) {
-    const emailMatch = lead.content.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/)
-    if (emailMatch) {
-      lead.email = emailMatch[1].toLowerCase()
+  if (!lead.email && textToSearch) {
+    const emails = extractEmails(textToSearch)
+    if (emails.length > 0) {
+      lead.email = emails[0]
       enriched = true
     }
   }
 
-  if (!lead.phone && lead.content) {
-    const patterns = [/\+\d{7,15}/g, /0[1-9]\d{8,10}/g, /\d{9,12}/g]
-    for (const p of patterns) {
-      const matches = lead.content.match(p)
-      if (matches) { lead.phone = matches[0]; enriched = true; break }
+  if (!lead.phone && textToSearch) {
+    const phones = extractPhones(textToSearch)
+    if (phones.length > 0) {
+      lead.phone = phones[0]
+      enriched = true
     }
   }
 
@@ -40,7 +59,6 @@ Return ONLY valid JSON: {"pain_point": "...", "opportunity": "...", "intent_scor
       if (typeof parsed.intent_score === 'number') { lead.intent_score = Math.min(100, Math.max(0, parsed.intent_score)); enriched = true }
       if (parsed.language) { lead.language = parsed.language; enriched = true }
     } catch (e) {
-      // AI enrichment failed, use defaults
       if (!lead.intent_score || lead.intent_score === 0) {
         lead.intent_score = 40
         enriched = true
@@ -59,7 +77,7 @@ Return ONLY valid JSON: {"pain_point": "...", "opportunity": "...", "intent_scor
 async function enrichStaleLeads(limit = 20) {
   const db = getDb()
   const stale = db.prepare(`
-    SELECT * FROM leads WHERE (intent_score = 0 OR intent_score IS NULL) AND content IS NOT NULL AND content != ''
+    SELECT * FROM leads WHERE email IS NULL AND (content IS NOT NULL AND content != '' OR raw_data IS NOT NULL AND raw_data != '')
     ORDER BY created_at ASC LIMIT ?
   `).all(limit)
 
@@ -67,11 +85,12 @@ async function enrichStaleLeads(limit = 20) {
   for (const lead of stale) {
     try {
       const { lead: enrichedLead } = await enrichLead(lead)
+      if (!enrichedLead.email && !enrichedLead.phone && !enrichedLead.intent_score) continue
       db.prepare(`
         UPDATE leads SET email = ?, phone = ?, pain_point = ?, opportunity = ?, intent_score = ?, language = ?, updated_at = ?
         WHERE id = ?
       `).run(
-        enrichedLead.email || '', enrichedLead.phone || '',
+        enrichedLead.email || null, enrichedLead.phone || null,
         enrichedLead.pain_point || '', enrichedLead.opportunity || '',
         enrichedLead.intent_score || 40, enrichedLead.language || 'en',
         new Date().toISOString(), lead.id
@@ -82,4 +101,27 @@ async function enrichStaleLeads(limit = 20) {
   return enriched
 }
 
-module.exports = { enrichLead, enrichStaleLeads }
+async function extractAllFromRawData(limit = 500) {
+  const db = getDb()
+  const candidates = db.prepare(`
+    SELECT id, raw_data, content, username FROM leads
+    WHERE email IS NULL AND (raw_data LIKE '%@%' OR content LIKE '%@%')
+    LIMIT ?
+  `).all(limit)
+
+  let extracted = 0
+  const insertStmt = db.prepare("UPDATE leads SET email = ?, updated_at = ? WHERE id = ? AND (email IS NULL OR email = '')")
+
+  for (const lead of candidates) {
+    const textToSearch = [lead.content, lead.raw_data, lead.username].filter(Boolean).join(' ')
+    const emails = extractEmails(textToSearch)
+    if (emails.length === 0) continue
+    try {
+      const result = insertStmt.run(emails[0], new Date().toISOString(), lead.id)
+      if (result.changes > 0) extracted++
+    } catch (e) { /* duplicate skipped by UNIQUE index */ }
+  }
+  return { scanned: candidates.length, extracted }
+}
+
+module.exports = { enrichLead, enrichStaleLeads, extractAllFromRawData, extractEmails, extractPhones }

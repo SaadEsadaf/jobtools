@@ -148,4 +148,80 @@ router.get('/stats', authMiddleware, (req, res) => {
   res.json({ total, today, bySource, byLanguage, byIntent, avgScore, withEmail, withPhone })
 })
 
+router.post('/import-json', authMiddleware, (req, res) => {
+  const db = getDb()
+  const { items } = req.body
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Array of lead objects required' })
+  }
+
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO leads (email, source, language, username, first_name, last_name, phone, intent_score, status, content, notes, imported_from, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'json_import', ?, ?)
+  `)
+
+  const tx = db.transaction((items) => {
+    let imported = 0, skipped = 0
+    for (const item of items) {
+      const email = (item.email || '').toLowerCase().trim()
+      if (!email && !item.username && !item.phone) { skipped++; continue }
+      try {
+        const r = insert.run(
+          email || null, item.source || 'json_import', item.language || null,
+          item.username || null, item.first_name || null, item.last_name || null,
+          item.phone || null, parseInt(item.intent_score) || 50, item.status || 'new',
+          item.content || null, item.notes || null,
+          new Date().toISOString(), new Date().toISOString()
+        )
+        if (r.changes > 0) imported++; else skipped++
+      } catch (e) { skipped++ }
+    }
+    return { imported, skipped }
+  })
+
+  const result = tx(items)
+  res.json({ imported: result.imported, skipped: result.skipped, total: items.length })
+})
+
+router.post('/import-csv', authMiddleware, (req, res) => {
+  const db = getDb()
+  const { csv } = req.body
+  if (!csv) return res.status(400).json({ error: 'CSV content required' })
+
+  const lines = csv.split('\n').filter(l => l.trim())
+  if (lines.length < 2) return res.json({ imported: 0, error: 'Need header + data rows' })
+
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO leads (email, source, language, username, first_name, last_name, phone, intent_score, status, content, imported_from, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'csv_import', ?, ?)
+  `)
+
+  const tx = db.transaction((rows) => {
+    let imported = 0, skipped = 0
+    for (let i = 1; i < rows.length; i++) {
+      const vals = rows[i].split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''))
+      const row = {}
+      headers.forEach((h, idx) => row[h] = vals[idx] || null)
+      const email = (row.email || '').toLowerCase().trim()
+      if (!email && !row.username && !row.phone) { skipped++; continue }
+      try {
+        const r = insert.run(
+          email || null, row.source || 'csv_import', row.language || null,
+          row.username || null, row.first_name || row.firstname || null,
+          row.last_name || row.lastname || null, row.phone || null,
+          parseInt(row.intent_score) || 50, row.status || 'new',
+          row.content || null,
+          new Date().toISOString(), new Date().toISOString()
+        )
+        if (r.changes > 0) imported++; else skipped++
+      } catch (e) { skipped++ }
+    }
+    return { imported, skipped }
+  })
+
+  const result = tx(lines)
+  res.json({ imported: result.imported, skipped: result.skipped, total: lines.length - 1 })
+})
+
 module.exports = router
