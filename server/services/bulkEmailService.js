@@ -1,5 +1,6 @@
 const { getDb } = require('../db');
 const { sendMail } = require('./marketingMailer');
+const { sendViaSendGrid } = require('./sendgridService');
 
 const IPTV_BOSS_URL = process.env.IPTV_BOSS_URL || 'http://localhost:3001';
 
@@ -136,6 +137,10 @@ function getBrevoLimit() {
   return parseInt(row?.value || '300');
 }
 
+function getCombinedDailyLimit() {
+  return getBrevoLimit() + getSendGridLimit();
+}
+
 async function sendEmailFallback(lead, subject, html, campaignName) {
   const db = getDb();
   const email = lead.email;
@@ -179,7 +184,7 @@ async function sendEmailFallback(lead, subject, html, campaignName) {
     // IPTV-Boss bridge failed — fall through to direct SMTP
   }
 
-  // Fallback: send directly via SMTP
+  // Fallback 1: send directly via SMTP
   try {
     await sendMail(email, subject, html);
     incrementDailyCount();
@@ -187,6 +192,16 @@ async function sendEmailFallback(lead, subject, html, campaignName) {
     return true;
   } catch (e) {
     console.error(`[BulkEmail] Direct SMTP failed for ${email}:`, e.message);
+  }
+
+  // Fallback 2: send via SendGrid API
+  try {
+    await sendViaSendGrid(email, name, subject, html);
+    incrementDailyCount();
+    db.prepare("UPDATE leads SET status = 'contacted', notes = COALESCE(NULLIF(notes, ''), '') || ' | " + campaignName + "_sent_sendgrid' WHERE id = ?").run(lead.id);
+    return true;
+  } catch (e) {
+    console.error(`[BulkEmail] SendGrid failed for ${email}:`, e.message);
     return false;
   }
 }
@@ -195,7 +210,7 @@ async function sendBulkEmails(leads, templateKey, campaignName = 'bulk_campaign'
   if (!leads || leads.length === 0) return { sent: 0, total: 0 };
 
   const db = getDb();
-  const dailyLimit = getBrevoLimit();
+  const dailyLimit = getCombinedDailyLimit();
   const sentToday = getDailyCount();
   const remaining = Math.max(0, dailyLimit - sentToday);
   const maxToSend = Math.min(leads.length, remaining);
@@ -266,4 +281,4 @@ async function ensureTemplates() {
   }
 }
 
-module.exports = { getLeadsForBatch, sendBulkEmails, ensureTemplates, getDailyCount, getBrevoLimit, TEMPLATES, BATCH_SIZES };
+module.exports = { getLeadsForBatch, sendBulkEmails, ensureTemplates, getDailyCount, getBrevoLimit, getCombinedDailyLimit, TEMPLATES, BATCH_SIZES };

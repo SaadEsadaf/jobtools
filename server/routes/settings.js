@@ -60,7 +60,8 @@ router.put('/app', authMiddleware, (req, res) => {
     'health_monitor_enabled', 'health_monitor_interval',
     'business_report_enabled', 'business_report_interval',
     'cart_recovery_enabled', 'trial_followup_enabled',
-    'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from_name', 'smtp_from_email'
+    'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from_name', 'smtp_from_email',
+    'sendgrid_api_key', 'sendgrid_daily_limit', 'brevo_daily_limit'
   ]
   const updates = Object.entries(req.body).filter(([key]) => allowed.includes(key))
   const insert = db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)")

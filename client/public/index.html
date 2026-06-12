@@ -429,7 +429,7 @@ async function loadCampaigns() {
   const stats = await api('/marketing/bulk/stats')
   if (!campaigns) return
   const container = $('tab-campaigns')
-  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [], sentToday: 0, dailyLimit: 300, remainingToday: 300 }
+  const s = stats || { total: 0, contacted: 0, remaining: 0, bySource: [], sentToday: 0, dailyLimit: 400, remainingToday: 400, sendgridLimit: 100 }
   const limitPct = s.dailyLimit > 0 ? Math.round((s.sentToday / s.dailyLimit) * 100) : 0
   const limitColor = limitPct >= 90 ? '#ef9a9a' : limitPct >= 70 ? '#ffb74d' : '#81c784'
   container.innerHTML = `
@@ -459,7 +459,7 @@ async function loadCampaigns() {
           </div>
           <div class="progress-bar" style="height:4px;margin:0;"><div class="fill" style="width:${limitPct}%;background:${limitColor};"></div></div>
           <div style="font-size:11px;color:#666;margin-top:4px;">
-            ${s.remainingToday > 0 ? `✅ ${s.remainingToday} emails restants aujourd'hui` : '❌ Limite quotidienne atteinte (Brevo) — configurez un SMTP direct dans ⚙️ Paramètres'}
+            ${s.remainingToday > 0 ? `✅ ${s.remainingToday} emails restants (Brevo ${s.dailyLimit - s.sendgridLimit} + SendGrid ${s.sendgridLimit})` : '❌ Limite quotidienne atteinte sur tous les providers'}
           </div>
         </div>
         <label style="display:block;color:#888;font-size:12px;margin-bottom:6px;">Template</label>
@@ -586,7 +586,7 @@ async function sendBulk() {
     } else {
       logBulk('✅ Sent: ' + resp.sent + ' / ' + resp.total, 'success')
       if (resp.failed > 0) logBulk('⚠️ Failed: ' + resp.failed, 'error')
-      if (resp.dailyLimitReached) logBulk('🚫 Limite journalière atteinte (' + resp.dailyLimit + ') - Configurez SMTP direct dans ⚙️ Paramètres', 'error')
+      if (resp.dailyLimitReached) logBulk('🚫 Limite journalière atteinte (' + resp.dailyLimit + ') - tous les providers épuisés', 'error')
       if (resp.stoppedByLimit) logBulk('⛔ Arrêté par limite journalière - ' + resp.sentToday + '/' + resp.dailyLimit + ' envoyés aujourd\'hui', 'error')
       if (resp.sentToday !== undefined) logBulk('📊 Envoyés aujourd\'hui: ' + resp.sentToday + '/' + resp.dailyLimit, '')
       status.textContent = resp.sent + '/' + resp.total + ' sent' + (resp.failed > 0 ? ', ' + resp.failed + ' failed' : '') + (resp.stoppedByLimit ? ' (limit reached)' : '')
@@ -1284,6 +1284,16 @@ async function loadSettings() {
         <div id="smtp-test-result" style="font-size:12px;margin-top:4px;"></div>
       </div>
       <div class="card" style="max-width:700px">
+        <h3>📧 SendGrid (Fallback automatique)</h3>
+        <div class="setting-row"><label>Clé API SendGrid</label><input class="s-field" data-key="sendgrid_api_key" value="${esc(settings.sendgrid_api_key || '')}" type="password" placeholder="SG.xxxxx.xxxxx"></div>
+        <div class="setting-row"><label>Limite journalière</label><input class="s-field" data-key="sendgrid_daily_limit" value="${esc(settings.sendgrid_daily_limit || '100')}" placeholder="100"></div>
+        <div class="setting-row"><label>Limite Brevo</label><input class="s-field" data-key="brevo_daily_limit" value="${esc(settings.brevo_daily_limit || '300')}" placeholder="300"></div>
+        <div style="margin-top:8px;display:flex;gap:8px;">
+          <button class="btn-sm btn-secondary" onclick="testSendGrid()">🧪 Tester SendGrid</button>
+          <span id="sendgrid-test-result" style="font-size:12px;line-height:30px;"></span>
+        </div>
+      </div>
+      <div class="card" style="max-width:700px">
         <h3>🔐 Social Login (Google/Apple)</h3>
         <div class="setting-row"><label>Google Client ID</label><input class="s-field" data-key="google_client_id" value="${esc(settings.google_client_id || '')}" placeholder="1234567890-abc123.apps.googleusercontent.com"></div>
         <div class="setting-row"><label>Apple Service ID</label><input class="s-field" data-key="apple_client_id" value="${esc(settings.apple_client_id || '')}" placeholder="com.example.service"></div>
@@ -1313,6 +1323,19 @@ async function testSmtp() {
   } else {
     result.innerHTML = '❌ Échec: ' + (res?.error || 'inconnu')
     showToast('❌ SMTP Échec: ' + (res?.error || 'inconnu'), 'error')
+  }
+}
+
+async function testSendGrid() {
+  const result = document.getElementById('sendgrid-test-result')
+  result.innerHTML = '⏳ Test...'
+  const res = await api('/marketing/test-sendgrid', { method: 'POST' })
+  if (res?.ok) {
+    result.innerHTML = `✅ OK! ${res.remaining}/${res.total} crédits restants`
+    showToast('✅ SendGrid connecté!')
+  } else {
+    result.innerHTML = '❌ ' + (res?.error || 'Échec')
+    showToast('❌ SendGrid: ' + (res?.error || 'Échec'), 'error')
   }
 }
 

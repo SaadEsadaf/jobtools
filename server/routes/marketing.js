@@ -93,15 +93,17 @@ router.post('/bulk/send', authMiddleware, async (req, res) => {
 
 router.get('/bulk/stats', authMiddleware, (req, res) => {
   const { getDb } = require('../db')
-  const { getDailyCount, getBrevoLimit } = require('../services/bulkEmailService')
+  const { getDailyCount, getCombinedDailyLimit } = require('../services/bulkEmailService')
+  const { getSendGridLimit } = require('../services/sendgridService')
   const db = getDb()
   const total = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 AND (notes IS NULL OR (notes NOT LIKE '%no_mx%' AND notes NOT LIKE '%invalid%'))").get().c
   const bySource = db.prepare("SELECT source, COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 GROUP BY source ORDER BY c DESC").all()
   const contacted = db.prepare("SELECT COUNT(*) as c FROM leads WHERE status = 'contacted'").get().c
   const remaining = db.prepare("SELECT COUNT(*) as c FROM leads WHERE email IS NOT NULL AND email != '' AND intent_score IS NOT NULL AND intent_score > 0 AND (notes IS NULL OR (notes NOT LIKE '%no_mx%' AND notes NOT LIKE '%invalid%')) AND (status IS NULL OR status != 'contacted')").get().c
   const sentToday = getDailyCount()
-  const dailyLimit = getBrevoLimit()
-  res.json({ total, contacted, remaining, bySource, sentToday, dailyLimit, remainingToday: Math.max(0, dailyLimit - sentToday) })
+  const combinedLimit = getCombinedDailyLimit()
+  const sendgrid = getSendGridLimit()
+  res.json({ total, contacted, remaining, bySource, sentToday, dailyLimit: combinedLimit, remainingToday: Math.max(0, combinedLimit - sentToday), sendgridLimit: sendgrid })
 })
 
 router.post('/test', authMiddleware, async (req, res) => {
@@ -122,6 +124,12 @@ router.post('/test', authMiddleware, async (req, res) => {
   } catch (e) {
     res.status(500).json({ sent: false, error: e.message })
   }
+})
+
+router.post('/test-sendgrid', authMiddleware, async (req, res) => {
+  const { testSendGrid } = require('../services/sendgridService')
+  const result = await testSendGrid()
+  res.json(result)
 })
 
 router.post('/templates/ensure', authMiddleware, async (req, res) => {
