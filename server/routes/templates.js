@@ -37,7 +37,7 @@ router.post('/inject/:id', authMiddleware, async (req, res) => {
   const template = db.prepare('SELECT * FROM templates WHERE id = ?').get(req.params.id)
   if (!template) return res.status(404).json({ error: 'Template not found' })
 
-  const actions = injectNow(template, target, campaign_id || null)
+  const actions = await injectNow(template, target, campaign_id || null)
   res.json({ templateId: template.id, type: template.type, target, actions })
 })
 

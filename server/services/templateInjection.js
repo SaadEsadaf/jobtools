@@ -9,9 +9,25 @@ const INJECTION_TYPES = {
   CHAT: 'chat_response'
 }
 
-function injectNow(template, target, campaignId = null) {
+async function injectNow(template, target, campaign = null) {
   const db = getDb()
   const siteDomain = db.prepare("SELECT value FROM app_settings WHERE key = 'site_domain'").get()?.value || 'dalletek.live'
+
+  let campaignId = null
+  let sourceFilter = null
+  let languageFilter = null
+  let intentFilter = null
+  if (campaign) {
+    if (typeof campaign === 'object') {
+      campaignId = campaign.id
+      sourceFilter = campaign.target_source
+      languageFilter = campaign.target_language
+      intentFilter = campaign.target_intent
+    } else {
+      campaignId = campaign
+    }
+  }
+
   const actions = []
 
   switch (target) {
@@ -29,13 +45,47 @@ function injectNow(template, target, campaignId = null) {
     }
 
     case INJECTION_TYPES.EMAIL: {
-      const leads = db.prepare("SELECT * FROM leads WHERE email IS NOT NULL AND email != '' AND status != 'unsubscribed' ORDER BY intent_score DESC LIMIT 50").all()
-      actions.push({
-        type: 'email_sequence',
-        queued: leads.length,
-        totalLeads: leads.length,
-        details: `${leads.length} emails queued for "${template.name}"`
-      })
+      let sql = "SELECT * FROM leads WHERE email IS NOT NULL AND email != '' AND status != 'unsubscribed'"
+      const params = []
+      const campaignName = campaign?.name || campaignId ? `campaign_${campaignId}` : template.name
+      if (sourceFilter) { sql += ' AND source = ?'; params.push(sourceFilter) }
+      if (languageFilter) { sql += ' AND language = ?'; params.push(languageFilter) }
+      if (intentFilter) { sql += ' AND intent_label = ?'; params.push(intentFilter) }
+      sql += ' ORDER BY intent_score DESC LIMIT 200'
+      const leads = db.prepare(sql).all(...params)
+
+      if (leads.length === 0) {
+        actions.push({
+          type: 'email_sequence',
+          sent: 0,
+          failed: 0,
+          totalLeads: 0,
+          details: 'No leads match the campaign filters'
+        })
+        break
+      }
+
+      try {
+        const { sendBulkEmails } = require('./bulkEmailService')
+        const templateKey = 'trial_invitation'
+        const result = await sendBulkEmails(leads, templateKey, campaignName)
+        actions.push({
+          type: 'email_sequence',
+          sent: result.sent || 0,
+          failed: result.failed || 0,
+          totalLeads: leads.length,
+          details: `${result.sent || 0} sent, ${result.failed || 0} failed out of ${leads.length} leads`
+        })
+      } catch (e) {
+        actions.push({
+          type: 'email_sequence',
+          sent: 0,
+          failed: leads.length,
+          totalLeads: leads.length,
+          error: e.message,
+          details: `Email sending failed: ${e.message}`
+        })
+      }
       break
     }
 

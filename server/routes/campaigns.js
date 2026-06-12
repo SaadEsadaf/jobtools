@@ -40,7 +40,7 @@ router.post('/execute/:id', authMiddleware, async (req, res) => {
   const results = []
   for (const target of injectionTypes) {
     if (template) {
-      const actions = injectNow(template, target, campaign.id)
+      const actions = await injectNow(template, target, campaign)
       results.push({ target, actions })
     } else {
       results.push({ target, error: 'No template assigned' })
