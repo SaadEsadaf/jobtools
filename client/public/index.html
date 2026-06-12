@@ -505,7 +505,7 @@ async function loadCampaigns() {
         <h3>📢 Campagnes <button class="btn-sm btn-secondary" onclick="showCreateCampaignForm()" style="margin-left:8px">➕ Nouvelle</button></h3>
         <table>
           <tr><th>ID</th><th>Nom</th><th>Filtres</th><th>Statut</th><th>Template</th><th>Résultat</th><th>Action</th></tr>
-          ${campaigns.length === 0 ? '<tr><td colspan="7" style="color:#555;text-align:center;">Aucune campagne créée</td></tr>' : campaigns.map(c => `<tr><td>${c.id}</td><td>${c.name}</td><td style="font-size:11px">${[c.target_source, c.target_language, c.target_intent].filter(Boolean).join(', ') || '-'}</td><td>${statusBadge(c.status)}</td><td>${c.template_id || '-'}</td><td style="font-size:11px;color:#888;">${c.results ? JSON.parse(c.results).map(r => (r.actions||[]).map(a => a.sent+'/'+a.totalLeads+' sent').join(', ')).join('; ') : '-'}</td><td>${c.status === 'draft' ? `<button class="btn-sm" onclick="executeCampaign(${c.id})">▶️ Exécuter</button>` : c.status === 'executed' ? `<span style="color:#555;font-size:11px;">✅ Exécutée</span>` : '-'}</td></tr>`).join('')}
+          ${campaigns.length === 0 ? '<tr><td colspan="7" style="color:#555;text-align:center;">Aucune campagne créée</td></tr>' : campaigns.map(c => `<tr><td>${c.id}</td><td>${c.name}</td><td style="font-size:11px">${[c.target_source, c.target_language, c.target_intent].filter(Boolean).join(', ') || '-'}</td><td>${statusBadge(c.status)}</td><td>${c.template_id || '-'}</td><td style="font-size:11px;color:#888;">${c.results ? JSON.parse(c.results).map(r => (r.actions||[]).map(a => a.sent+'/'+a.totalLeads+' sent').join(', ')).join('; ') : '-'}</td><td>${c.status === 'draft' ? `<button class="btn-sm" onclick="executeCampaign(${c.id})">▶️ Exécuter</button>` : c.status === 'executed' ? `<button class="btn-sm" onclick="showCampaignResults(${c.id})">📊 Résultats</button>` : '-'}</td></tr>`).join('')}
         </table>
       </div>
     </div>
@@ -670,6 +670,40 @@ async function executeCampaign(id) {
   } else {
     showToast('Erreur: ' + (res?.error || 'inconnue'), 'error')
   }
+}
+
+async function showCampaignResults(id) {
+  const overlay = document.createElement('div')
+  overlay.className = 'modal-overlay'
+  overlay.innerHTML = '<div class="modal"><h2>📊 Résultats campagne #' + id + '</h2><p style="color:#888;">Chargement...</p></div>'
+  document.body.appendChild(overlay)
+  const res = await api('/campaigns/' + id + '/results')
+  if (!res) { overlay.remove(); return }
+  overlay.innerHTML = `<div class="modal">
+    <h2>📊 ${res.campaign_name}</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0;">
+      <div style="background:#0d0d0d;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#4fc3f7;">${res.leads_sent}</div>
+        <div style="font-size:11px;color:#888;">Envoyés</div>
+      </div>
+      <div style="background:#0d0d0d;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#81c784;">${res.unique_opens}</div>
+        <div style="font-size:11px;color:#888;">Ouvertures uniques <span style="color:#81c784;">(${res.open_rate}%)</span></div>
+      </div>
+      <div style="background:#0d0d0d;border-radius:8px;padding:16px;text-align:center;">
+        <div style="font-size:28px;font-weight:700;color:#ffb74d;">${res.unique_clicks}</div>
+        <div style="font-size:11px;color:#888;">Clics uniques <span style="color:#ffb74d;">(${res.click_rate}%)</span></div>
+      </div>
+    </div>
+    <div style="margin:12px 0;font-size:12px;color:#666;">Exécutée le ${res.executed_at ? new Date(res.executed_at).toLocaleString() : '-'}</div>
+    ${res.recent_events && res.recent_events.length > 0 ? `
+    <h3 style="font-size:13px;">Événements récents</h3>
+    <table style="font-size:11px;">
+      <tr><th>Type</th><th>Email</th><th>Date</th></tr>
+      ${res.recent_events.slice(0, 20).map(e => `<tr><td>${e.event_type === 'open' ? '👁️ Ouverture' : '🖱️ Clic'}</td><td style="font-size:10px;">${e.lead_email}</td><td style="font-size:10px;">${new Date(e.created_at).toLocaleString()}</td></tr>`).join('')}
+    </table>` : '<p style="color:#555;font-size:12px;">Aucun événement de tracking encore</p>'}
+    <div class="btn-group" style="margin-top:16px;"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Fermer</button></div>
+  </div>`
 }
 
 // ==================== TEMPLATES ====================

@@ -151,19 +151,34 @@ function getCampaignQuota() {
   return Math.max(0, getCombinedDailyLimit() - getReservedQuota());
 }
 
+function addTrackingToHtml(html, campaignName, email, siteUrl) {
+  const trackingBase = `${siteUrl}/api/tracking`;
+  const trackingPixel = `${trackingBase}/pixel.gif?campaign=${encodeURIComponent(campaignName)}&email=${encodeURIComponent(email)}&t=${Date.now()}`;
+  const trackedHtml = html.replace(/<a\s+([^>]*?)href="([^"]+)"([^>]*?)>/gi, (match, before, url, after) => {
+    if (url.includes('/unsubscribe') || url.includes('unsubscribe_url') || url.indexOf('http') !== 0) return match;
+    const clickUrl = `${trackingBase}/click?campaign=${encodeURIComponent(campaignName)}&email=${encodeURIComponent(email)}&url=${encodeURIComponent(url)}`;
+    return `<a ${before}href="${clickUrl}"${after}>`;
+  });
+  return trackedHtml + `<img src="${trackingPixel}" width="1" height="1" style="display:none;" />`;
+}
+
 async function sendEmailFallback(lead, subject, html, campaignName) {
   const db = getDb();
   const email = lead.email;
   const name = lead.name || lead.first_name || lead.email.split('@')[0];
   const siteUrl = 'https://dalletek.live';
 
+  // Generate tracking URLs
+  const trackingBase = `${siteUrl}/api/tracking`;
+  const trackingPixel = `${trackingBase}/pixel.gif?campaign=${encodeURIComponent(campaignName)}&email=${encodeURIComponent(email)}&t=${Date.now()}`;
+  const claimUrl = `${trackingBase}/click?campaign=${encodeURIComponent(campaignName)}&email=${encodeURIComponent(email)}&url=${encodeURIComponent(siteUrl + '/trial?email=' + encodeURIComponent(email) + '&utm_source=email&utm_medium=' + encodeURIComponent(campaignName))}`;
+  const unsubscribeUrl = `${siteUrl}/unsubscribe?email=${encodeURIComponent(email)}`;
+
+  // Build tracking-enriched HTML for fallback paths
+  const htmlWithTracking = addTrackingToHtml(html, campaignName, email, siteUrl);
+
   // Try IPTV-Boss bridge first
   try {
-    const trackingBase = `${siteUrl}/api/tracking`;
-    const trackingPixel = `${trackingBase}/pixel.gif?campaign=${encodeURIComponent(campaignName)}&email=${encodeURIComponent(email)}&t=${Date.now()}`;
-    const claimUrl = `${siteUrl}/trial?email=${encodeURIComponent(email)}&utm_source=email&utm_medium=${encodeURIComponent(campaignName)}`;
-    const unsubscribeUrl = `${siteUrl}/unsubscribe?email=${encodeURIComponent(email)}`;
-
     const resp = await fetch(`${IPTV_BOSS_URL}/api/campaigns/blast-single`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -196,7 +211,7 @@ async function sendEmailFallback(lead, subject, html, campaignName) {
 
   // Fallback 1: send directly via SMTP
   try {
-    await sendMail(email, subject, html);
+    await sendMail(email, subject, htmlWithTracking);
     incrementDailyCount();
     db.prepare("UPDATE leads SET status = 'contacted', notes = COALESCE(NULLIF(notes, ''), '') || ' | " + campaignName + "_sent_direct' WHERE id = ?").run(lead.id);
     return true;
@@ -206,7 +221,7 @@ async function sendEmailFallback(lead, subject, html, campaignName) {
 
   // Fallback 2: send via SendGrid API
   try {
-    await sendViaSendGrid(email, name, subject, html);
+    await sendViaSendGrid(email, name, subject, htmlWithTracking);
     incrementDailyCount();
     db.prepare("UPDATE leads SET status = 'contacted', notes = COALESCE(NULLIF(notes, ''), '') || ' | " + campaignName + "_sent_sendgrid' WHERE id = ?").run(lead.id);
     return true;

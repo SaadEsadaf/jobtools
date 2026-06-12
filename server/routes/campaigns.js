@@ -72,4 +72,33 @@ router.get('/history', authMiddleware, (req, res) => {
   res.json(campaigns)
 })
 
+router.get('/:id/results', authMiddleware, async (req, res) => {
+  const db = getDb()
+  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id)
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
+
+  const leadsCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE notes LIKE '%" + campaign.name + "_sent%' OR notes LIKE '%" + campaign.name + "_sent_%'").get().c
+
+  let tracking = { unique_opens: 0, unique_clicks: 0, open_rate: 0, click_rate: 0, recent_events: [] }
+  try {
+    const resp = await fetch(`http://localhost:3001/api/tracking/stats/${encodeURIComponent(campaign.name)}`)
+    if (resp.ok) tracking = await resp.json()
+  } catch (e) {
+    // IPTV-Boss unreachable
+  }
+
+  res.json({
+    campaign_id: campaign.id,
+    campaign_name: campaign.name,
+    status: campaign.status,
+    executed_at: campaign.executed_at,
+    leads_sent: leadsCount || 0,
+    unique_opens: tracking.unique_opens || 0,
+    unique_clicks: tracking.unique_clicks || 0,
+    open_rate: leadsCount > 0 ? ((tracking.unique_opens / leadsCount) * 100).toFixed(1) : 0,
+    click_rate: leadsCount > 0 ? ((tracking.unique_clicks / leadsCount) * 100).toFixed(1) : 0,
+    recent_events: tracking.recent_events || [],
+  })
+})
+
 module.exports = router
