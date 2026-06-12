@@ -77,7 +77,7 @@ router.get('/:id/results', authMiddleware, async (req, res) => {
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id)
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
 
-  const leadsCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE notes LIKE '%" + campaign.name + "_sent%' OR notes LIKE '%" + campaign.name + "_sent_%'").get().c
+  const leadsCount = db.prepare("SELECT COUNT(*) as c FROM leads WHERE notes LIKE ? OR notes LIKE ?").get('%' + campaign.name + '_sent%', '%' + campaign.name + '_sent_%').c
 
   let tracking = { unique_opens: 0, unique_clicks: 0, open_rate: 0, click_rate: 0, recent_events: [] }
   try {
