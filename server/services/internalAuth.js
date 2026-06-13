@@ -24,7 +24,8 @@ function verifySignature(req, res, next) {
   }
 
   const secret = getSharedSecret()
-  const rawBody = JSON.stringify(req.body)
+  const body = req.body || {}
+  const rawBody = JSON.stringify(body)
   const expected = crypto.createHmac('sha256', secret).update(rawBody + timestamp).digest('hex')
 
   if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {

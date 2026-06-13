@@ -118,8 +118,25 @@
     .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 2000; animation: slideIn .3s ease; }
     .toast-success { background: #1b5e20; color: #a5d6a7; border: 1px solid #2e7d32; }
     .toast-error { background: #b71c1c; color: #ef9a9a; border: 1px solid #c62828; }
+    .toast-info { background: #0d47a1; color: #90caf9; border: 1px solid #1565c0; }
     @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
+    .email-builder { display: flex; gap: 20px; align-items: flex-start; }
+    .email-builder .editor { flex: 1; min-width: 0; }
+    .email-builder .preview { flex: 1; min-width: 0; }
+    .email-builder label { display: block; color: #888; font-size: 12px; margin-bottom: 4px; margin-top: 12px; }
+    .email-builder input, .email-builder select { width: 100%; padding: 10px; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 6px; color: #fff; font-size: 13px; }
+    .email-builder textarea { width: 100%; min-height: 320px; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 6px; color: #ccc; font-size: 12px; font-family: monospace; padding: 12px; resize: vertical; line-height: 1.6; }
+    .email-builder .vars { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+    .email-builder .vars button { padding: 3px 8px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; color: #aaa; font-size: 10px; cursor: pointer; font-family: monospace; }
+    .email-builder .vars button:hover { background: #3a3a3a; color: #fff; }
+    .email-builder .preview-frame { background: #fff; border-radius: 8px; overflow: hidden; min-height: 400px; max-height: 600px; overflow-y: auto; }
+    .email-builder .preview-frame iframe { width: 100%; height: 100%; min-height: 400px; border: none; }
+    .email-builder .type-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .email-builder .type-tabs button { padding: 8px 16px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; color: #666; cursor: pointer; font-size: 12px; }
+    .email-builder .type-tabs button.active { background: #e94560; border-color: #e94560; color: #fff; }
+
+    @media (max-width: 900px) { .email-builder { flex-direction: column; } }
     @media (max-width: 600px) {
       .nav-tabs { overflow-x: auto; }
       .nav-tabs button { padding: 10px 14px; font-size: 12px; white-space: nowrap; }
@@ -158,7 +175,9 @@
     <button class="active" data-tab="dashboard">📊 Tableau de bord</button>
     <button data-tab="leads">👥 Leads</button>
     <button data-tab="campaigns">📢 Campagnes</button>
+    <button data-tab="stock">📦 Stock</button>
     <button data-tab="templates">📝 Templates</button>
+    <button data-tab="emailbuilder">📧 Email Builder</button>
     <button data-tab="injection">⚡ Injection</button>
     <button data-tab="queue">📦 File d'attente</button>
     <button data-tab="brain">🧠 Pont IPTV-Boss</button>
@@ -180,7 +199,9 @@
     <div class="tab-content active" id="tab-dashboard"></div>
     <div class="tab-content" id="tab-leads"></div>
     <div class="tab-content" id="tab-campaigns"></div>
+    <div class="tab-content" id="tab-stock"></div>
     <div class="tab-content" id="tab-templates"></div>
+    <div class="tab-content" id="tab-emailbuilder"></div>
     <div class="tab-content" id="tab-injection"></div>
     <div class="tab-content" id="tab-queue"></div>
     <div class="tab-content" id="tab-brain"></div>
@@ -315,7 +336,9 @@ function loadTab(name) {
   if (name === 'dashboard') loadDashboard()
   else if (name === 'leads') loadLeads()
   else if (name === 'campaigns') loadCampaigns()
+  else if (name === 'stock') loadStock()
   else if (name === 'templates') loadTemplates()
+  else if (name === 'emailbuilder') loadEmailBuilder()
   else if (name === 'injection') loadInjection()
   else if (name === 'queue') loadQueue()
   else if (name === 'brain') loadBrain()
@@ -760,6 +783,98 @@ async function showCampaignResults(id) {
   </div>`
 }
 
+// ==================== STOCK ====================
+async function loadStock() {
+  const el = $('tab-stock');
+  el.innerHTML = '<p style="color:#888">Chargement des stocks depuis le Business Engine...</p>';
+  const d = await api('/templates/stock');
+  if (!d) { el.innerHTML = '<p style="color:#e94560">Erreur de connexion au Business Engine</p>'; return }
+  const a = d.activationCodes, t = d.trialCodes, o = d.orders, r = d.revenue, al = d.alerts;
+  const stockClass = (avail, min) => avail <= 0 ? 'style="color:#e94560;font-weight:700"' : avail < (min||5) ? 'style="color:#e65100;font-weight:600"' : '';
+  const pct = a.total > 0 ? Math.round(a.available / a.total * 100) : 0;
+  const pctClass = pct <= 10 ? 'style="color:#e94560"' : pct <= 25 ? 'style="color:#e65100"' : 'style="color:#2e7d32"';
+  el.innerHTML = `
+    <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div><h2 style="font-size:18px;color:#fff;margin:0">📦 Stock & Commandes</h2><p style="color:#666;font-size:12px;margin-top:2px">Mis à jour: ${new Date(d.updatedAt).toLocaleString('fr-FR')}</p></div>
+      <div class="flex" style="gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="loadStock()">🔄 Rafraîchir</button>
+        <button class="btn btn-sm" onclick="runTargetedCampaign()">📢 Campagne ciblée</button>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="value">${a.available}</div><div class="label">Codes d'activation disponibles</div><div class="sub">${pct}% du stock total (${a.total})</div></div>
+      <div class="stat-card"><div class="value">${a.used}</div><div class="label">Codes utilisés</div><div class="sub">${a.expired} expirés</div></div>
+      <div class="stat-card"><div class="value" ${stockClass(t.available, 10)}>${t.available}</div><div class="label">Codes d'essai disponibles</div><div class="sub">${t.used} utilisés · ${t.total} total</div></div>
+      <div class="stat-card"><div class="value">${o.trial}</div><div class="label">Essais en cours</div><div class="sub">${o.paid} abonnés payants</div></div>
+      <div class="stat-card"><div class="value">${o.today}</div><div class="label">Commandes aujourd'hui</div><div class="sub">${o.pending} en attente</div></div>
+      <div class="stat-card"><div class="value">€${parseFloat(r.total).toFixed(2)}</div><div class="label">Revenu total</div><div class="sub">€${parseFloat(r.today).toFixed(2)} aujourd'hui</div></div>
+    </div>
+    <div class="flex">
+      <div class="card" style="flex:1.5">
+        <h3>📊 Stock par fournisseur</h3>
+        <table><thead><tr><th>Fournisseur</th><th>Total</th><th>Disponible</th><th>Utilisé</th></tr></thead>
+        <tbody>${a.byProvider.map(p => `<tr><td>${p.provider}</td><td>${p.total}</td><td ${stockClass(p.available, 3)}>${p.available}</td><td>${p.used}</td></tr>`).join('')||'<tr><td colspan="4" style="color:#555">Aucune donnée</td></tr>'}</tbody></table>
+      </div>
+      <div class="card" style="flex:1">
+        <h3>📊 Stock par plan</h3>
+        <table><thead><tr><th>Plan</th><th>Durée</th><th>Disponible</th></tr></thead>
+        <tbody>${a.byPlan.map(p => `<tr><td>${p.plan_name}</td><td>${p.duration_months||'?'}mois</td><td ${stockClass(p.available, 3)}>${p.available}</td></tr>`).join('')||'<tr><td colspan="3" style="color:#555">Aucune donnée</td></tr>'}</tbody></table>
+      </div>
+    </div>
+    <div class="flex">
+      <div class="card" style="flex:1">
+        <h3>⏳ Commandes récentes</h3>
+        <table><thead><tr><th>Email</th><th>Type</th><th>Montant</th><th>Statut</th><th>Date</th></tr></thead>
+        <tbody>${o.recent.map(ord => `<tr>
+          <td style="font-size:12px">${ord.customer_email||'?'}</td>
+          <td>${ord.is_trial ? '<span style="color:#e65100">Essai</span>' : '<span style="color:#2e7d32">Payant</span>'}</td>
+          <td>€${ord.amount||'0'}</td>
+          <td>${{'pending':'⏳','completed':'✅','fulfilled':'📦','cancelled':'❌'}[ord.status]||ord.status}</td>
+          <td style="font-size:11px;color:#666">${ord.created_at||'-'}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>
+      <div class="card" style="flex:1">
+        <h3>🚨 Alertes stock</h3>
+        ${al.lowStock.length ? `<table><thead><tr><th>Plan</th><th>Dispo</th><th>Seuil</th></tr></thead><tbody>${al.lowStock.map(s => `<tr><td>${s.provider} ${s.plan_name} (${s.duration_months||'?'}mois)</td><td ${stockClass(s.available, s.min_stock)}>${s.available}</td><td style="color:#555">min ${s.min_stock}</td></tr>`).join('')}</tbody></table>` : '<p style="color:#2e7d32;font-size:13px">✅ Tous les stocks sont suffisants</p>'}
+        ${o.byMethod.length ? `<h3 style="margin-top:16px;font-size:13px;color:#888">Paiements par méthode</h3><div class="breakdown-list">${o.byMethod.map(m => `<div class="breakdown-item"><span class="key">${m.method||'?'}</span><span class="val">${m.count}</span></div>`).join('')}</div>` : ''}
+      </div>
+    </div>
+    <div class="card">
+      <h3>📈 Revenus (30 jours)</h3>
+      <div style="display:flex;align-items:end;gap:2px;height:80px;padding:8px 0">${r.byDay.map(d => {
+        const max = Math.max(...r.byDay.map(x=>x.revenue), 1);
+        const h = Math.max(3, (d.revenue / max) * 75);
+        return `<div title="${d.day}: €${parseFloat(d.revenue).toFixed(2)} (${d.count} commandes)" style="flex:1;background:linear-gradient(180deg,#e94560,#c73652);border-radius:3px 3px 0 0;height:${h}px;min-width:8px"></div>`;
+      }).join('')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#555;margin-top:4px">
+        <span>${r.byDay[0]?.day||'-'}</span>
+        <span>${r.byDay[r.byDay.length-1]?.day||'-'}</span>
+      </div>
+    </div>
+    <div class="card" style="text-align:center;padding:24px">
+      <h3>🎯 Campagne ciblée depuis ce stock</h3>
+      <p style="color:#888;font-size:13px;margin-bottom:16px">Créez une campagne email ciblant les utilisateurs selon les données de stock et commandes</p>
+      <div class="flex" style="justify-content:center;gap:12px">
+        <button class="btn" onclick="runTargetedCampaign()">📢 Lancer une campagne ciblée</button>
+        <button class="btn btn-secondary" onclick="switchTab('campaigns')">📢 Aller aux campagnes</button>
+      </div>
+    </div>`;
+}
+
+async function runTargetedCampaign() {
+  const d = await api('/templates/stock/sync-campaign', { method: 'POST' });
+  if (!d) return showToast('Erreur de synchronisation', 'error');
+  const msg = `📊 Données de stock synchronisées:\n
+• ${d.availableTrials} codes d'essai disponibles
+• ${d.availableCodes} codes d'activation disponibles
+• ${d.trialOrders} essais en cours, ${d.paidOrders} abonnés payants
+• ${d.pendingOrders} commandes en attente
+• Revenu total: €${parseFloat(d.totalRevenue).toFixed(2)}
+${d.lowStockPlans.length ? '\\n⚠️ Plans en rupture:\\n' + d.lowStockPlans.join('\\n') : ''}
+${d.recentOrders.length ? '\\n📋 Dernières commandes:\\n' + d.recentOrders.map(o => `  ${o.email} — ${o.type} (€${o.amount||0})`).join('\\n') : ''}`;
+  showToast(msg.replace(/\\n/g, '\n'), 'info');
+}
+
 // ==================== TEMPLATES ====================
 async function loadTemplates() {
   const templates = await api('/templates')
@@ -796,6 +911,170 @@ async function injectTemplate(id) {
   const res = await api('/templates/inject/' + id, { method: 'POST', body: JSON.stringify({ target }) })
   if (res) { showToast('Injection réussie!'); loadInjection() }
 }
+
+// ==================== EMAIL BUILDER ====================
+let emailBuilderState = { type: 'trial_default', subject: '', body: '' }
+
+const EMAIL_TYPES = {
+  trial_default: { name: 'Essai 24h', vars: ['customer_name','customer_email','username','password','server_url','duration_hours','site_name','site_url','provider_name','plan_name','m3u_url','dashboard_url','app_name','app_logo','app_steps'] },
+  credentials_default: { name: 'Creds Paiement', vars: ['customer_name','customer_email','username','password','server_url','code','site_name','provider_name','plan_name'] },
+  payment_link_default: { name: 'Lien Paiement', vars: ['customer_name','customer_email','checkout_url','plan_name','amount','order_id','site_name'] },
+}
+
+async function loadEmailBuilder() {
+  const container = $('tab-emailbuilder')
+  const types = Object.entries(EMAIL_TYPES)
+  container.innerHTML = `
+    <div class="section">
+      <h2>📧 Constructeur d'emails</h2>
+      <p style="color:#666;font-size:13px;margin-bottom:16px;">Éditez vos templates d'emails transactionnels et envoyez-les au Business Engine</p>
+      <div class="type-tabs" id="eb-types">${types.map(([k, v]) => `<button data-type="${k}" class="${k === emailBuilderState.type ? 'active' : ''}" onclick="switchEBType('${k}')">${v.name}</button>`).join('')}</div>
+      <div class="email-builder">
+        <div class="card editor">
+          <label>Sujet</label>
+          <input id="eb-subject" value="${escHtml(emailBuilderState.subject)}" oninput="ebPreview()" placeholder="Sujet de l'email...">
+          <label>Corps HTML</label>
+          <textarea id="eb-body" oninput="ebPreview()" placeholder="<h2>Bonjour {{customer_name}}...</h2>">${escHtml(emailBuilderState.body)}</textarea>
+          <label>Variables disponibles</label>
+          <div class="vars" id="eb-vars"></div>
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="btn" onclick="ebSync()">📤 Envoyer au Business Engine</button>
+            <button class="btn btn-secondary" onclick="ebReset()">↺ Réinitialiser</button>
+          </div>
+        </div>
+        <div class="card preview" style="flex:1">
+          <label style="margin-top:0;">Aperçu en direct</label>
+          <div class="preview-frame" id="eb-frame"><div style="padding:40px;text-align:center;color:#555;">Chargement de l'aperçu...</div></div>
+        </div>
+      </div>
+    </div>
+  `
+  ebLoadFromBoss()
+}
+
+async function ebLoadFromBoss() {
+  const type = emailBuilderState.type
+  const data = await api('/templates/boss/' + type)
+  if (data && data.body_html) {
+    emailBuilderState.subject = data.subject || ''
+    emailBuilderState.body = data.body_html || ''
+    $('eb-subject').value = emailBuilderState.subject
+    $('eb-body').value = emailBuilderState.body
+  }
+  ebRenderVars()
+  ebPreview()
+}
+
+function ebRenderVars() {
+  const info = EMAIL_TYPES[emailBuilderState.type]
+  const vars = info ? info.vars : []
+  const container = $('eb-vars')
+  if (!container) return
+  container.innerHTML = vars.map(v => `<button onclick="ebInsertVar('${v}')">{{${v}}}</button>`).join('')
+}
+
+function ebInsertVar(name) {
+  const ta = $('eb-body')
+  if (!ta) return
+  const start = ta.selectionStart
+  const before = ta.value.substring(0, start)
+  const after = ta.value.substring(ta.selectionEnd)
+  ta.value = before + '{{' + name + '}}' + after
+  ta.selectionStart = ta.selectionEnd = start + name.length + 4
+  ta.focus()
+  emailBuilderState.body = ta.value
+  ebPreview()
+}
+
+function ebPreview() {
+  const ta = $('eb-body')
+  const subjectInput = $('eb-subject')
+  if (!ta || !subjectInput) return
+  emailBuilderState.body = ta.value
+  emailBuilderState.subject = subjectInput.value
+  const frame = $('eb-frame')
+  if (!frame) return
+  frame.innerHTML = '<div style="padding:40px;text-align:center;color:#555;">⏳ Génération de l\'aperçu...</div>'
+  debouncePreview(ta.value)
+}
+
+const debouncePreview = (() => {
+  let timer
+  return (body) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => ebDoPreview(body), 300)
+  }
+})()
+
+async function ebDoPreview(body) {
+  if (!body) {
+    const frame = $('eb-frame')
+    if (frame) frame.innerHTML = '<div style="padding:40px;text-align:center;color:#555;">💡 Tapez du HTML pour voir l\'aperçu</div>'
+    return
+  }
+  const res = await api('/templates/boss/preview', {
+    method: 'POST',
+    body: JSON.stringify({ body_html: body })
+  })
+  const frame = $('eb-frame')
+  if (!frame) return
+  if (res?.html) {
+    frame.innerHTML = `<iframe srcdoc="${escHtml(res.html)}" sandbox="allow-same-origin"></iframe>`
+  } else {
+    frame.innerHTML = '<div style="padding:40px;text-align:center;color:#e94560;">❌ Erreur de rendu</div>'
+  }
+}
+
+async function ebSync() {
+  const btn = document.querySelector('#eb-types button.active') || document.querySelector('#eb-types button')
+  const type = btn?.dataset?.type || emailBuilderState.type
+  const info = EMAIL_TYPES[type]
+  const subject = $('eb-subject')?.value || ''
+  const body = $('eb-body')?.value || ''
+  if (!body) return showToast('Le corps HTML est vide', 'error')
+  const res = await api('/templates/boss/sync', {
+    method: 'POST',
+    body: JSON.stringify({
+      template_key: type,
+      name: info?.name || type,
+      subject,
+      body_html: body,
+      variables: info?.vars || []
+    })
+  })
+  if (res && !res.error) {
+    showToast('✅ Template envoyé au Business Engine avec succès!')
+  } else {
+    showToast('❌ Erreur: ' + (res?.error || 'Inconnue'), 'error')
+  }
+}
+
+function switchEBType(type) {
+  emailBuilderState.type = type
+  emailBuilderState.subject = ''
+  emailBuilderState.body = ''
+  document.querySelectorAll('#eb-types button').forEach(b => b.classList.toggle('active', b.dataset.type === type))
+  ebLoadFromBoss()
+}
+
+async function ebReset() {
+  if (!confirm('Réinitialiser ce template vers le contenu par défaut ?')) return
+  const type = emailBuilderState.type
+  const res = await api('/templates/boss/' + type)
+  if (res && res.body_html) {
+    emailBuilderState.subject = res.subject || ''
+    emailBuilderState.body = res.body_html || ''
+    $('eb-subject').value = emailBuilderState.subject
+    $('eb-body').value = emailBuilderState.body
+    ebRenderVars()
+    ebPreview()
+    showToast('Réinitialisé depuis le Business Engine ✓')
+  } else {
+    showToast('⚠️ Template par défaut non trouvé sur le Business Engine', 'error')
+  }
+}
+
+function escHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 
 // ==================== INJECTION ====================
 async function loadInjection() {
