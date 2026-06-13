@@ -1,5 +1,6 @@
 const { getDb } = require('../db');
 const nodemailer = require('nodemailer');
+const { sendViaSendGrid } = require('./sendgridService');
 
 function getMailer() {
   const db = getDb();
@@ -43,13 +44,18 @@ async function sendMail(to, subject, html) {
   if (!mailer.fromEmail) {
     throw new Error('SMTP not configured — set smtp_host, smtp_user, smtp_pass, smtp_from_email in Settings');
   }
-  const info = await mailer.sendMail({
-    from: `"${mailer.fromName || 'Dalletek'}" <${mailer.fromEmail}>`,
-    to,
-    subject,
-    html,
-  });
-  return info;
+  try {
+    const info = await mailer.sendMail({
+      from: `"${mailer.fromName || 'Dalletek'}" <${mailer.fromEmail}>`,
+      to,
+      subject,
+      html,
+    });
+    return info;
+  } catch (e) {
+    console.error(`[MarketingMailer] SMTP failed (${e.message}), trying SendGrid...`);
+    return await sendViaSendGrid(to, mailer.fromName || 'Dalletek', subject, html);
+  }
 }
 
 module.exports = { getMailer, renderEmailTemplate, sendMail };
