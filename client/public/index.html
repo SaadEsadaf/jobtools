@@ -171,6 +171,8 @@
     <button data-tab="leadlab">🔬 Lead Lab</button>
     <button data-tab="whois">🌐 WHOIS</button>
     <button data-tab="blogs">📝 Blogs</button>
+    <button data-tab="adsmanager">📊 Ads Manager</button>
+    <button data-tab="youtube">▶️ YouTube</button>
     <button data-tab="settings">⚙️ Paramètres</button>
   </div>
 
@@ -191,6 +193,8 @@
     <div class="tab-content" id="tab-leadlab"></div>
     <div class="tab-content" id="tab-whois"></div>
     <div class="tab-content" id="tab-blogs"></div>
+    <div class="tab-content" id="tab-adsmanager"></div>
+    <div class="tab-content" id="tab-youtube"></div>
     <div class="tab-content" id="tab-settings"></div>
   </div>
 </div>
@@ -214,6 +218,27 @@ function $(id) { return document.getElementById(id) }
 function el(tag, attrs = {}, ...children) { const e = document.createElement(tag); Object.entries(attrs).forEach(([k, v]) => { if (k.startsWith('on')) e.addEventListener(k.slice(2).toLowerCase(), v); else if (k === 'className') e.className = v; else e.setAttribute(k, v) }); children.forEach(c => { if (typeof c === 'string') e.appendChild(document.createTextNode(c)); else if (c) e.appendChild(c) }); return e }
 
 function statusBadge(s) { const colors = { new: 'badge-new', contacted: 'badge-contacted', interested: 'badge-interested', unsubscribed: 'badge-unsubscribed', pending: 'badge-pending', executed: 'badge-executed', delivered: 'badge-delivered' }; return el('span', { className: 'badge-status ' + (colors[s] || 'badge-new') }, s || 'unknown') }
+
+function showModal(html) {
+  const overlay = document.createElement('div')
+  overlay.className = 'modal-overlay active'
+  overlay.id = 'modal-overlay'
+  overlay.innerHTML = `<div class="modal">${html}</div>`
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal() })
+  document.body.appendChild(overlay)
+}
+function closeModal() { const el = document.getElementById('modal-overlay'); if (el) el.remove() }
+function switchTab(name) {
+  const btn = document.querySelector(`[data-tab="${name}"]`)
+  if (btn) {
+    document.querySelectorAll('#navTabs button').forEach(b => b.classList.remove('active'))
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'))
+    btn.classList.add('active')
+    const tabContent = $('tab-' + name)
+    if (tabContent) tabContent.classList.add('active')
+    loadTab(name)
+  }
+}
 
 function doLogin() {
   const username = $('loginUser').value
@@ -303,6 +328,8 @@ function loadTab(name) {
   else if (name === 'leadlab') loadLeadLab()
   else if (name === 'whois') loadWhois()
   else if (name === 'blogs') loadBlogs()
+  else if (name === 'adsmanager') loadAdsManager()
+  else if (name === 'youtube') loadYouTube()
   else if (name === 'settings') loadSettings()
 }
 
@@ -1271,6 +1298,590 @@ async function checkSingleDomain() {
       ${res.emails?.length ? '<br><br>' + res.emails.map(e => '📧 ' + e).join('<br>') : '<br><br>❌ Aucun email DMARC trouvé'}
     </div>
   `
+}
+
+// ==================== ADS MANAGER ====================
+async function loadAdsManager() {
+  const container = $('tab-adsmanager')
+  const accounts = await api('/ads/accounts') || []
+  const formats = await api('/ads/formats') || []
+
+  container.innerHTML = `
+    <div class="section">
+      <h2>📊 Ads Manager</h2>
+      <div class="flex" style="gap:16px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:400px">
+          <h3>🔗 Connect Facebook Ad Account</h3>
+          <div class="flex" style="gap:8px;flex-wrap:wrap">
+            <input id="fb-token" placeholder="System User Access Token" style="flex:2;min-width:200px;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:12px;font-family:monospace">
+            <input id="fb-adaccount" placeholder="Ad Account ID (act_XXXXX)" style="flex:1;min-width:150px;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:12px">
+            <button class="btn" onclick="connectFBAccount()">Connect</button>
+          </div>
+          <div id="fb-connect-error" style="color:#e94560;font-size:12px;margin-top:4px"></div>
+        </div>
+      </div>
+      <div id="fb-accounts-list"></div>
+      <div id="fb-campaigns-area" style="display:none">
+        <div class="flex" style="justify-content:space-between;align-items:center;margin-top:16px">
+          <h2>📋 Campaigns</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="fb-campaign-status-filter" style="padding:6px 10px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:12px" onchange="loadFBCampaigns()">
+              <option value="">All Status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="PAUSED">Paused</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+            <select id="fb-selected-account" style="display:none"></select>
+            <button class="btn" onclick="showCreateCampaign()">+ New Campaign</button>
+          </div>
+        </div>
+        <div id="fb-campaigns-list"><p style="color:#666">Loading campaigns...</p></div>
+
+        <h2 style="margin-top:24px">📝 Ad Preview Builder</h2>
+        <div class="flex" style="gap:16px">
+          <div class="card" style="flex:1">
+            <h3>Creative Spec</h3>
+            <label>Headline</label>
+            <input id="ad-preview-headline" placeholder="Your headline" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
+            <label>Text</label>
+            <textarea id="ad-preview-text" placeholder="Ad text" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px;min-height:60px"></textarea>
+            <label>Link URL</label>
+            <input id="ad-preview-link" value="https://dalletek.live" style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
+            <label>Image URL (optional)</label>
+            <input id="ad-preview-image" placeholder="https://..." style="width:100%;padding:8px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;color:#fff;font-size:13px">
+            <label>CTA</label>
+            <select id="ad-preview-cta" style="width:100%;padding:8px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:13px">
+              <option value="SIGN_UP">Sign Up</option>
+              <option value="LEARN_MORE">Learn More</option>
+              <option value="SHOP_NOW">Shop Now</option>
+              <option value="GET_OFFER">Get Offer</option>
+              <option value="SUBSCRIBE">Subscribe</option>
+              <option value="CONTACT_US">Contact Us</option>
+            </select>
+            <label>Ad Format</label>
+            <select id="ad-preview-format" style="width:100%;padding:8px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:13px">
+              ${formats.map(f => `<option value="${f.value}">${f.label}</option>`).join('')}
+            </select>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn" onclick="generateAdPreview()">🎨 Generate Preview</button>
+              <button class="btn btn-success" onclick="deployAdFromPreview()">🚀 Deploy as Ad</button>
+            </div>
+          </div>
+          <div class="card" style="flex:1">
+            <h3>Preview</h3>
+            <div id="ad-preview-result" style="background:#fff;border-radius:8px;min-height:300px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">
+              Configure and click "Generate Preview"
+            </div>
+          </div>
+        </div>
+
+        <h2 style="margin-top:24px">📈 Performance</h2>
+        <div style="margin-bottom:12px">
+          <select id="fb-insights-preset" style="padding:6px 10px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:12px" onchange="loadFBInsights()">
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last_7d" selected>Last 7 Days</option>
+            <option value="last_14d">Last 14 Days</option>
+            <option value="last_30d">Last 30 Days</option>
+            <option value="this_month">This Month</option>
+            <option value="last_month">Last Month</option>
+          </select>
+          <button class="btn-sm btn-secondary" onclick="loadFBInsights()" style="margin-left:8px">⟳ Refresh</button>
+        </div>
+        <div id="fb-insights-table"><p style="color:#666">Select an account to view insights</p></div>
+      </div>
+    </div>
+  `
+  renderFBAccounts(accounts)
+}
+
+function renderFBAccounts(accounts) {
+  const list = $('fb-accounts-list')
+  if (!accounts.length) {
+    list.innerHTML = '<p style="color:#666;margin-top:12px">No connected accounts. Connect one above.</p>'
+    return
+  }
+  list.innerHTML = accounts.map(a => `
+    <div class="card" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <strong>${a.account_name || 'Unnamed Account'}</strong>
+        <span style="color:#666;font-size:12px"> · act_${a.account_id} · ${JSON.parse(a.meta || '{}').currency || 'USD'}</span>
+        <span style="color:#4caf50;font-size:11px;margin-left:8px">● Connected</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm btn-secondary" onclick="selectFBAccount(${a.id})">Select</button>
+        <button class="btn-sm btn-warning" onclick="disconnectFBAccount(${a.id})">Disconnect</button>
+      </div>
+    </div>
+  `).join('')
+  // Auto-select first account
+  const sel = $('fb-selected-account')
+  sel.innerHTML = accounts.map(a => `<option value="${a.id}">${a.account_name || 'act_' + a.account_id}</option>`).join('')
+  sel.style.display = 'inline-block'
+  sel.style.cssText = 'padding:6px 10px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:12px'
+  if (accounts.length > 0) selectFBAccount(accounts[0].id)
+}
+
+async function connectFBAccount() {
+  const token = $('fb-token').value.trim()
+  const accountId = $('fb-adaccount').value.trim().replace(/^act_/, '')
+  if (!token || !accountId) { $('fb-connect-error').textContent = 'Both fields required'; return }
+  $('fb-connect-error').textContent = 'Connecting...'
+  const res = await api('/ads/accounts/connect', {
+    method: 'POST',
+    body: JSON.stringify({ accessToken: token, adAccountId: accountId })
+  })
+  if (res?.error) { $('fb-connect-error').textContent = res.error; return }
+  if (res?.success) {
+    $('fb-connect-error').style.color = '#4caf50'
+    $('fb-connect-error').textContent = `Connected: ${res.name || 'Account'}`
+    loadAdsManager()
+  }
+}
+
+async function disconnectFBAccount(id) {
+  await api(`/ads/accounts/${id}`, { method: 'DELETE' })
+  loadAdsManager()
+}
+
+let selectedFBAccountId = null
+
+async function selectFBAccount(id) {
+  selectedFBAccountId = id
+  $('fb-campaigns-area').style.display = 'block'
+  loadFBCampaigns()
+  loadFBInsights()
+}
+
+async function loadFBCampaigns() {
+  if (!selectedFBAccountId) return
+  const status = $('fb-campaign-status-filter').value
+  const campaigns = await api(`/ads/campaigns/${selectedFBAccountId}?status=${status}`)
+  if (!campaigns) { $('fb-campaigns-list').innerHTML = '<p style="color:#666">Failed to load campaigns</p>'; return }
+  if (!campaigns.length) { $('fb-campaigns-list').innerHTML = '<p style="color:#666">No campaigns found</p>'; return }
+  $('fb-campaigns-list').innerHTML = `
+    <table>
+      <thead><tr><th>Name</th><th>Objective</th><th>Status</th><th>Daily Budget</th><th>Created</th></tr></thead>
+      <tbody>
+        ${campaigns.map(c => `<tr>
+          <td><strong>${c.name}</strong></td>
+          <td>${c.objective || '-'}</td>
+          <td><span class="badge-status badge-${c.status === 'ACTIVE' ? 'executed' : c.status === 'PAUSED' ? 'pending' : 'new'}">${c.status}</span></td>
+          <td>${c.daily_budget ? '$' + (parseInt(c.daily_budget) / 100).toFixed(2) : '-'}</td>
+          <td style="font-size:11px;color:#666">${new Date(c.created_time).toLocaleDateString()}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `
+}
+
+function showCreateCampaign() {
+  showModal(`
+    <h2>Create Campaign</h2>
+    <div id="create-campaign-error" style="color:#e94560;font-size:12px;margin-bottom:8px"></div>
+    <label>Campaign Name</label>
+    <input id="new-camp-name" placeholder="e.g., World Cup 2026 - France">
+    <label>Objective</label>
+    <select id="new-camp-objective">
+      <option value="OUTCOME_LEADS">Leads</option>
+      <option value="OUTCOME_TRAFFIC">Traffic</option>
+      <option value="OUTCOME_SALES">Sales</option>
+      <option value="OUTCOME_AWARENESS">Awareness</option>
+      <option value="OUTCOME_ENGAGEMENT">Engagement</option>
+    </select>
+    <label>Daily Budget ($)</label>
+    <input id="new-camp-budget" type="number" step="1" min="1" placeholder="10">
+    <label>Status</label>
+    <select id="new-camp-status">
+      <option value="PAUSED">Paused (safe)</option>
+      <option value="ACTIVE">Active</option>
+    </select>
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="createFBCampaign()">Create Campaign</button>
+    </div>
+  `)
+}
+
+async function createFBCampaign() {
+  if (!selectedFBAccountId) return
+  const name = $('new-camp-name').value.trim()
+  if (!name) { $('create-campaign-error').textContent = 'Name required'; return }
+  const res = await api(`/ads/campaigns/${selectedFBAccountId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      objective: $('new-camp-objective').value,
+      dailyBudget: $('new-camp-budget').value,
+      status: $('new-camp-status').value
+    })
+  })
+  if (res?.error) { $('create-campaign-error').textContent = res.error; return }
+  closeModal()
+  showToast('Campaign created!')
+  loadFBCampaigns()
+}
+
+async function generateAdPreview() {
+  if (!selectedFBAccountId) { showToast('Select an ad account first'); return }
+  const result = $('ad-preview-result')
+  result.innerHTML = '<p style="color:#666">Generating preview...</p>'
+  const res = await api(`/ads/preview/${selectedFBAccountId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      headline: $('ad-preview-headline').value,
+      text: $('ad-preview-text').value,
+      link: $('ad-preview-link').value,
+      imageUrl: $('ad-preview-image').value || undefined,
+      callToAction: $('ad-preview-cta').value,
+      adFormat: $('ad-preview-format').value
+    })
+  })
+  if (res?.error) { result.innerHTML = `<p style="color:#e94560">${res.error}</p>`; return }
+  if (res?.data?.[0]?.body) {
+    result.innerHTML = res.data[0].body
+  } else if (res?.body) {
+    result.innerHTML = res.body
+  } else {
+    result.innerHTML = `<pre style="font-size:11px;color:#666;overflow:auto">${JSON.stringify(res, null, 2)}</pre>`
+  }
+}
+
+async function deployAdFromPreview() {
+  if (!selectedFBAccountId) { showToast('Select an ad account first'); return }
+  const campId = prompt('Enter campaign ID to deploy to:')
+  if (!campId) return
+  const setName = prompt('Enter ad set name (or leave blank for auto):') || `Ad Set ${Date.now()}`
+  const adSet = await api(`/ads/adsets/${selectedFBAccountId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      campaignId: campId,
+      name: setName,
+      dailyBudget: '10',
+      optimizationGoal: 'REACH',
+      billingEvent: 'IMPRESSIONS',
+      status: 'PAUSED'
+    })
+  })
+  if (adSet?.error) { showToast('Error: ' + adSet.error); return }
+  const res = await api(`/ads/ads/${selectedFBAccountId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      adSetId: adSet.id,
+      name: $('ad-preview-headline').value || 'New Ad',
+      headline: $('ad-preview-headline').value,
+      text: $('ad-preview-text').value,
+      link: $('ad-preview-link').value,
+      imageUrl: $('ad-preview-image').value || undefined,
+      callToAction: $('ad-preview-cta').value,
+      status: 'PAUSED'
+    })
+  })
+  if (res?.error) { showToast('Error: ' + res.error); return }
+  showToast('Ad deployed in PAUSED status! Check the ad set and activate when ready.')
+}
+
+async function loadFBInsights() {
+  if (!selectedFBAccountId) return
+  const preset = $('fb-insights-preset').value
+  const insights = await api(`/ads/insights/${selectedFBAccountId}?datePreset=${preset}`)
+  const table = $('fb-insights-table')
+  if (!insights || !insights.length) {
+    table.innerHTML = '<p style="color:#666">No data for this period</p>'
+    return
+  }
+  let totalSpend = 0, totalImpressions = 0, totalClicks = 0
+  table.innerHTML = `
+    <table>
+      <thead><tr><th>Campaign</th><th>Impressions</th><th>Clicks</th><th>Spend</th><th>CTR</th><th>CPC</th><th>CPM</th></tr></thead>
+      <tbody>
+        ${insights.map(i => {
+          const spend = parseFloat(i.spend) || 0
+          const impr = parseInt(i.impressions) || 0
+          const clicks = parseInt(i.clicks) || 0
+          totalSpend += spend; totalImpressions += impr; totalClicks += clicks
+          return `<tr>
+            <td>${i.campaign_name}</td>
+            <td>${impr.toLocaleString()}</td>
+            <td>${clicks.toLocaleString()}</td>
+            <td>$${spend.toFixed(2)}</td>
+            <td>${(parseFloat(i.ctr) || 0).toFixed(2)}%</td>
+            <td>$${(parseFloat(i.cpc) || 0).toFixed(2)}</td>
+            <td>$${(parseFloat(i.cpm) || 0).toFixed(2)}</td>
+          </tr>`
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight:600;color:#e94560">
+          <td>Totals</td>
+          <td>${totalImpressions.toLocaleString()}</td>
+          <td>${totalClicks.toLocaleString()}</td>
+          <td>$${totalSpend.toFixed(2)}</td>
+          <td>${totalClicks > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) + '%' : '0%'}</td>
+          <td>$${totalClicks > 0 ? (totalSpend / totalClicks).toFixed(2) : '0.00'}</td>
+          <td>$${totalImpressions > 0 ? ((totalSpend / totalImpressions) * 1000).toFixed(2) : '0.00'}</td>
+        </tr>
+      </tfoot>
+    </table>
+  `
+}
+
+// ==================== YOUTUBE ====================
+async function loadYouTube() {
+  const container = $('tab-youtube')
+  const channels = await api('/youtube/channels') || []
+  const videos = await api('/youtube/videos') || []
+
+  container.innerHTML = `
+    <div class="section">
+      <h2>▶️ YouTube Studio</h2>
+      <div class="flex" style="gap:16px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:350px">
+          <h3>🔗 Connect YouTube Channel</h3>
+          <p style="color:#888;font-size:12px;margin-bottom:8px">
+            First configure your YouTube OAuth credentials in 
+            <a href="#" onclick="switchTab('apis');return false" style="color:#e94560">🔌 APIs Sociales</a> tab,
+            then click below.
+          </p>
+          <button class="btn" onclick="connectYouTube()">🔗 Connect with Google</button>
+          <div id="yt-connect-status" style="margin-top:8px;font-size:12px"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:350px">
+          <h3>📤 Upload Video</h3>
+          <form id="yt-upload-form" onsubmit="return false">
+            <label>Title</label>
+            <input id="yt-upload-title" placeholder="Video title" style="width:100%">
+            <label>Description</label>
+            <textarea id="yt-upload-desc" placeholder="Video description" style="width:100%;min-height:60px"></textarea>
+            <label>Tags (comma separated)</label>
+            <input id="yt-upload-tags" placeholder="iptv, streaming, tutorial" style="width:100%">
+            <label>Privacy</label>
+            <select id="yt-upload-privacy" style="width:100%">
+              <option value="private">Private</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="public">Public</option>
+            </select>
+            <label>Video File</label>
+            <input type="file" id="yt-upload-file" accept=".mp4,.avi,.mov,.mkv,.webm" style="width:100%;padding:8px">
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+              <button class="btn" onclick="uploadToYouTube()">Upload</button>
+              <span id="yt-upload-status" style="font-size:12px;color:#666"></span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="flex" style="gap:16px;flex-wrap:wrap;margin-top:8px">
+        <div class="card" style="flex:1;min-width:350px">
+          <h3>🌐 Upload from URL</h3>
+          <label>Video URL</label>
+          <input id="yt-url-upload" placeholder="https://example.com/video.mp4" style="width:100%">
+          <label>Title</label>
+          <input id="yt-url-title" placeholder="Auto-generated from URL" style="width:100%">
+          <button class="btn-sm" onclick="uploadToYouTubeFromUrl()" style="margin-top:8px">Download & Upload</button>
+          <span id="yt-url-status" style="font-size:12px;color:#666;margin-left:8px"></span>
+        </div>
+      </div>
+
+      <h2 style="margin-top:24px">📊 My Videos</h2>
+      <div id="yt-videos-table"></div>
+
+      <h2 style="margin-top:24px">💬 Comments</h2>
+      <div style="margin-bottom:8px">
+        <select id="yt-comment-video-select" style="padding:6px 10px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;color:#ccc;font-size:12px" onchange="loadYTComments()">
+          <option value="">Select a video...</option>
+          ${videos.map(v => `<option value="${v.youtube_id}">${v.title}</option>`).join('')}
+        </select>
+        <button class="btn-sm btn-secondary" onclick="fetchYTComments()">⟳ Fetch from YouTube</button>
+      </div>
+      <div id="yt-comments-list"><p style="color:#666">Select a video to see comments</p></div>
+    </div>
+  `
+  renderYTVideos(videos)
+  renderYTChannels(channels)
+
+  // Check OAuth callback params
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('connected')) {
+    showToast('✅ YouTube channel connected!')
+    history.replaceState({}, '', window.location.pathname + window.location.hash)
+  } else if (params.get('error')) {
+    showToast('❌ ' + params.get('error'))
+    history.replaceState({}, '', window.location.pathname + window.location.hash)
+  }
+}
+
+function renderYTChannels(channels) {
+  const list = $('yt-connect-status')
+  if (!channels.length) {
+    list.innerHTML = '<span style="color:#ff9800">No channels connected yet</span>'
+    return
+  }
+  list.innerHTML = channels.map(c => `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding:8px;background:#151515;border-radius:6px">
+      <span>✅ <strong>${c.title || 'Channel'}</strong></span>
+      <button class="btn-sm btn-warning" onclick="disconnectYTChannel('${c.channel_id}')">Disconnect</button>
+    </div>
+  `).join('')
+}
+
+function renderYTVideos(videos) {
+  const table = $('yt-videos-table')
+  if (!videos.length) {
+    table.innerHTML = '<p style="color:#666">No videos uploaded yet</p>'
+    return
+  }
+  table.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+      <button class="btn-sm btn-secondary" onclick="syncVideoStats()">⟳ Sync Stats</button>
+    </div>
+    <table>
+      <thead><tr><th>Title</th><th>Views</th><th>Likes</th><th>Comments</th><th>Status</th><th>Link</th></tr></thead>
+      <tbody>
+        ${videos.map(v => `<tr>
+          <td><strong>${v.title}</strong></td>
+          <td>${(v.views || 0).toLocaleString()}</td>
+          <td>${(v.likes || 0).toLocaleString()}</td>
+          <td>${(v.comments_count || 0).toLocaleString()}</td>
+          <td><span class="badge-status badge-${v.privacy_status === 'public' ? 'executed' : 'pending'}">${v.privacy_status}</span></td>
+          <td><a href="https://youtube.com/watch?v=${v.youtube_id}" target="_blank" style="color:#e94560;font-size:12px">Open</a></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `
+}
+
+async function connectYouTube() {
+  const res = await api('/youtube/auth-url')
+  if (res?.url) {
+    window.open(res.url, '_blank', 'width=600,height=700')
+    showToast('Complete authorization in the popup window')
+  } else if (res?.error) {
+    showToast('Error: ' + res.error)
+  }
+}
+
+async function disconnectYTChannel(channelId) {
+  await api(`/youtube/channels/${channelId}`, { method: 'DELETE' })
+  showToast('Channel disconnected')
+  loadYouTube()
+}
+
+async function uploadToYouTube() {
+  const file = $('yt-upload-file').files[0]
+  if (!file) { showToast('Select a video file'); return }
+  const status = $('yt-upload-status')
+  status.textContent = 'Uploading... (' + (file.size / 1024 / 1024).toFixed(1) + 'MB)'
+
+  const formData = new FormData()
+  formData.append('video', file)
+  formData.append('title', $('yt-upload-title').value || file.name)
+  formData.append('description', $('yt-upload-desc').value || '')
+  formData.append('tags', $('yt-upload-tags').value || '')
+  formData.append('privacyStatus', $('yt-upload-privacy').value)
+
+  const res = await fetch('/api/youtube/upload', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + TOKEN },
+    body: formData
+  })
+  const data = await res.json()
+  if (data?.error) { status.textContent = '❌ ' + data.error; return }
+  status.textContent = '✅ Uploaded! youtube.com/watch?v=' + data.youtubeId
+  showToast('Video uploaded!')
+  loadYouTube()
+}
+
+async function uploadToYouTubeFromUrl() {
+  const url = $('yt-url-upload').value.trim()
+  if (!url) { showToast('Enter a video URL'); return }
+  const status = $('yt-url-status')
+  status.textContent = 'Downloading from URL...'
+  const res = await api('/youtube/upload-url', {
+    method: 'POST',
+    body: JSON.stringify({
+      url,
+      title: $('yt-url-title').value || 'Video from URL ' + new Date().toLocaleDateString(),
+      description: '',
+      tags: '',
+      privacyStatus: 'private'
+    })
+  })
+  if (res?.error) { status.textContent = '❌ ' + res.error; return }
+  status.textContent = '✅ Uploaded! youtube.com/watch?v=' + res.youtubeId
+  showToast('Video uploaded from URL!')
+  loadYouTube()
+}
+
+async function syncVideoStats() {
+  await api('/youtube/videos/sync-stats', { method: 'POST', body: '{}' })
+  showToast('Stats synced!')
+  loadYouTube()
+}
+
+async function loadYTComments() {
+  const videoId = $('yt-comment-video-select').value
+  if (!videoId) { $('yt-comments-list').innerHTML = '<p style="color:#666">Select a video to see comments</p>'; return }
+  const comments = await api(`/youtube/videos/${videoId}/comments`)
+  if (!comments || !comments.length) {
+    $('yt-comments-list').innerHTML = '<p style="color:#666">No comments found. Try fetching from YouTube.</p>'
+    return
+  }
+  $('yt-comments-list').innerHTML = comments.map(c => `
+    <div style="padding:10px;background:#151515;border-radius:8px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between">
+        <strong style="color:#fff;font-size:13px">${c.author}</strong>
+        <span style="color:#666;font-size:11px">${c.published_at ? new Date(c.published_at).toLocaleDateString() : ''}</span>
+      </div>
+      <p style="color:#ccc;font-size:13px;margin:4px 0">${c.text}</p>
+      <div style="display:flex;gap:8px;margin-top:4px;align-items:center;flex-wrap:wrap">
+        ${c.is_replied
+          ? '<span style="color:#4caf50;font-size:11px">✓ Replied</span>'
+          : `<input class="yt-reply-input" data-cid="${c.youtube_comment_id}" placeholder="Write a reply..." style="flex:1;min-width:200px;padding:6px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:4px;color:#fff;font-size:12px">
+             <button class="btn-sm btn-success" onclick="replyToYTComment('${c.youtube_comment_id}', this)">Reply</button>`
+        }
+        <button class="btn-sm btn-secondary" onclick="moderateYTComment('${c.youtube_comment_id}', 'approve')">✓ Approve</button>
+        <button class="btn-sm btn-warning" onclick="moderateYTComment('${c.youtube_comment_id}', 'hide')">✗ Hide</button>
+        <button class="btn-sm" style="background:#b71c1c" onclick="moderateYTComment('${c.youtube_comment_id}', 'spam')">🚫 Spam</button>
+      </div>
+    </div>
+  `).join('')
+}
+
+async function fetchYTComments() {
+  const videoId = $('yt-comment-video-select').value
+  if (!videoId) { showToast('Select a video first'); return }
+  const res = await api(`/youtube/videos/${videoId}/comments/fetch`, {
+    method: 'POST',
+    body: JSON.stringify({ channelId: document.querySelector('#yt-connect-status span')?.textContent || '' })
+  })
+  if (res?.error) { showToast('Error: ' + res.error); return }
+  showToast(`Fetched ${res.stored || 0} comments`)
+  loadYTComments()
+}
+
+async function replyToYTComment(commentId, btn) {
+  const input = btn.closest('div').querySelector('.yt-reply-input')
+  const text = input.value.trim()
+  if (!text) { showToast('Write a reply first'); return }
+  btn.textContent = 'Sending...'
+  const res = await api('/youtube/comments/reply', {
+    method: 'POST',
+    body: JSON.stringify({ commentId, text, channelId: '' })
+  })
+  if (res?.error) { showToast('Error: ' + res.error); btn.textContent = 'Reply'; return }
+  showToast('Reply posted!')
+  loadYTComments()
+}
+
+async function moderateYTComment(commentId, action) {
+  const res = await api('/youtube/comments/moderate', {
+    method: 'POST',
+    body: JSON.stringify({ commentId, action, channelId: '' })
+  })
+  if (res?.error) { showToast('Error: ' + res.error); return }
+  showToast(`Comment ${action}d`)
+  loadYTComments()
 }
 
 // ==================== SETTINGS ====================

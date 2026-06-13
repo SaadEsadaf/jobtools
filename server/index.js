@@ -25,6 +25,10 @@ const marketingRoutes = require('./routes/marketing')
 const whoisRoutes = require('./routes/whoisMiner')
 const ticketRoutes = require('./routes/tickets')
 const blogRoutes = require('./routes/blogs')
+const adsRoutes = require('./routes/ads')
+const youtubeRoutes = require('./routes/youtube')
+const pagesRoutes = require('./routes/pages')
+const internalRoutes = require('./routes/internal')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/stats', statsRoutes)
@@ -41,6 +45,34 @@ app.use('/api/marketing', marketingRoutes)
 app.use('/api/whois', whoisRoutes)
 app.use('/api/tickets', ticketRoutes)
 app.use('/api/blogs', blogRoutes)
+app.use('/api/ads', adsRoutes)
+app.use('/api/youtube', youtubeRoutes)
+app.use('/', pagesRoutes)
+app.use('/api/internal', internalRoutes)
+
+// Start SEO agent
+const { runSEOAudit, autoBuildFromLeads } = require('./services/seoAgent')
+const sDb = require('./db').getDb()
+
+// Weekly audit every 7 days
+const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
+setTimeout(() => {
+  console.log('[SEOAgent] Running initial SEO audit...')
+  runSEOAudit().catch(e => console.error('[SEOAgent] Error:', e))
+}, 60000)
+setInterval(() => {
+  console.log('[SEOAgent] Running weekly SEO audit...')
+  runSEOAudit().catch(e => console.error('[SEOAgent] Error:', e))
+}, WEEKLY_MS)
+console.log('[SEOAgent] First audit in 60s, then every 7 days')
+
+// Auto-build from leads at configured interval
+const autoBuildIntervalHours = Number(sDb.prepare("SELECT value FROM app_settings WHERE key = 'auto_build_interval'").get()?.value) || 6
+const AUTO_BUILD_MS = Math.min(autoBuildIntervalHours, 23) * 60 * 60 * 1000
+setInterval(() => {
+  autoBuildFromLeads().catch(e => console.error('[AutoBuild] Error:', e))
+}, AUTO_BUILD_MS)
+console.log(`[AutoBuild] Running every ${autoBuildIntervalHours}h`)
 
 // Start background scheduler
 const { startScheduler } = require('./services/scheduler')

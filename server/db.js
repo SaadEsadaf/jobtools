@@ -202,6 +202,129 @@ function migrate() {
       FOREIGN KEY (website_id) REFERENCES websites(id),
       UNIQUE(website_id, slug)
     );
+
+    CREATE TABLE IF NOT EXISTS ad_platforms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      platform TEXT NOT NULL,
+      account_name TEXT DEFAULT '',
+      account_id TEXT NOT NULL,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT DEFAULT '',
+      token_expires_at DATETIME,
+      is_active INTEGER DEFAULT 1,
+      meta TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS ad_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      platform TEXT NOT NULL,
+      platform_id TEXT,
+      platform_account_id TEXT,
+      name TEXT NOT NULL,
+      objective TEXT,
+      status TEXT DEFAULT 'PAUSED',
+      daily_budget TEXT,
+      currency TEXT DEFAULT 'USD',
+      insights TEXT DEFAULT '{}',
+      last_synced DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS yt_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT UNIQUE,
+      title TEXT DEFAULT '',
+      access_token TEXT DEFAULT '',
+      refresh_token TEXT DEFAULT '',
+      token_expires_at DATETIME,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS yt_videos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER REFERENCES yt_channels(id),
+      youtube_id TEXT UNIQUE,
+      title TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      tags TEXT DEFAULT '[]',
+      privacy_status TEXT DEFAULT 'private',
+      thumbnail_path TEXT DEFAULT '',
+      views INTEGER DEFAULT 0,
+      likes INTEGER DEFAULT 0,
+      comments_count INTEGER DEFAULT 0,
+      uploaded_at DATETIME,
+      last_synced DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS yt_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      video_id INTEGER REFERENCES yt_videos(id),
+      youtube_comment_id TEXT UNIQUE,
+      parent_comment_id TEXT DEFAULT '',
+      author TEXT DEFAULT '',
+      author_channel_url TEXT DEFAULT '',
+      text TEXT DEFAULT '',
+      moderation_status TEXT DEFAULT 'published',
+      is_replied INTEGER DEFAULT 0,
+      reply_text TEXT DEFAULT '',
+      published_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS landing_pages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      website_id INTEGER REFERENCES websites(id),
+      title TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      keyword TEXT,
+      audience TEXT,
+      html_content TEXT NOT NULL,
+      language TEXT DEFAULT 'fr',
+      active INTEGER DEFAULT 1,
+      provider_id INTEGER,
+      plan_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(website_id, slug)
+    );
+
+    CREATE TABLE IF NOT EXISTS demand_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      website_id INTEGER REFERENCES websites(id),
+      keyword TEXT,
+      source TEXT,
+      language TEXT,
+      content TEXT,
+      pain_point TEXT,
+      opportunity TEXT,
+      intent_score INTEGER DEFAULT 0,
+      intent_label TEXT,
+      status TEXT DEFAULT 'new',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS seo_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      website_id INTEGER REFERENCES websites(id),
+      run_type TEXT,
+      action TEXT,
+      keyword TEXT,
+      details TEXT,
+      result TEXT,
+      status TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent TEXT,
+      action TEXT,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 }
 
@@ -216,26 +339,14 @@ function seed() {
     db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('iptv_boss_url', 'http://localhost:3001')
     db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('iptv_boss_token', '')
     db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('site_domain', 'dalletek.live')
+    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('payment_engine_url', process.env.PAYMENT_ENGINE_URL || 'http://localhost:3004')
+    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('internal_api_secret', process.env.INTERNAL_API_SECRET || 'dev-secret-change-in-production')
   }
-  // Seed default website
+  // Seed default website if none exists
   const existing = db.prepare('SELECT COUNT(*) as c FROM websites').get().c
   if (existing === 0) {
     db.prepare("INSERT INTO websites (name, domain, slug, site_name, language) VALUES (?, ?, ?, ?, ?)")
       .run('Dalletek', 'dalletek.live', 'dalletek', 'Dalletek', 'fr')
-  }
-}
-
-function seed() {
-  const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c
-  if (userCount === 0) {
-    const hash = bcrypt.hashSync('admin123', 10)
-    db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run('admin', hash)
-  }
-  const brainUrl = db.prepare("SELECT value FROM app_settings WHERE key = 'iptv_boss_url'").get()
-  if (!brainUrl) {
-    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('iptv_boss_url', 'http://localhost:3001')
-    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('iptv_boss_token', '')
-    db.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)").run('site_domain', 'dalletek.live')
   }
 }
 
