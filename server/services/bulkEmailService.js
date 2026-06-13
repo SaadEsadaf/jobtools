@@ -14,7 +14,7 @@ const TEMPLATES = {
 <div style="max-width:600px;margin:0 auto;">
 <div style="background:linear-gradient(135deg,#1a1a3e,#0d2818);padding:32px 20px;text-align:center;border-bottom:3px solid #ffd700;">
 <h1 style="color:#ffd700;font-size:24px;margin:0;">🏆 Watch the World Cup 2026</h1>
-<p style="color:#a0d0ff;font-size:14px;margin:8px 0 0;">72h Free Trial — All 64 Matches Live in 4K</p>
+<p style="color:#a0d0ff;font-size:14px;margin:8px 0 0;">24h Free Trial — All 64 Matches Live in 4K</p>
 </div>
 <div style="background:#1a1a1a;padding:32px 24px;border-radius:8px;margin:16px;">
 <p style="color:#e0e0e0;font-size:15px;line-height:1.7;">Hi {{customer_name}},</p>
@@ -257,7 +257,7 @@ async function sendBulkEmails(leads, templateKey, campaignName = 'bulk_campaign'
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#1a1a1a;color:#e0e0e0;padding:32px;border-radius:12px;">
         <h1 style="color:#ffd700;">🎁 Free Trial Waiting</h1>
         <p>Hi ${name},</p>
-        <p>Claim your <strong>72-hour free trial</strong> and enjoy 179,915+ channels in 4K.</p>
+        <p>Claim your <strong>24-hour free trial</strong> and enjoy 179,915+ channels in 4K.</p>
         <div style="text-align:center;margin:24px 0;">
           <a href="https://dalletek.live/trial?email=${encodeURIComponent(email)}" style="display:inline-block;background:#ffd700;color:#000;padding:14px 36px;border-radius:50px;font-weight:800;text-decoration:none;">🎁 CLAIM FREE TRIAL</a>
         </div>

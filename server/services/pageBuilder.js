@@ -32,7 +32,7 @@ const FR = {
   faq2Q: 'Quels appareils sont supportés ?', faq2A: 'Nous supportons toutes les plateformes : Android TV, Amazon Firestick, iOS/Apple TV, Android, Smart TV (Samsung, LG, Sony), MAG, et PC/Mac via VLC ou des lecteurs IPTV comme TiviMate et IPTV Smarters.',
   faq3Q: 'Comment commencer ?', faq3A: 'Choisissez une offre, effectuez le paiement, et vous recevrez vos identifiants de connexion par email. Téléchargez une application IPTV, entrez vos identifiants, et commencez à regarder immédiatement. Installation moyenne en moins de 5 minutes.',
   faq4Q: 'Y a-t-il une garantie ?', faq4A: 'Absolument ! Nous offrons une garantie satisfait ou remboursé de 7 jours sur tous les forfaits payants. Si vous n\'êtes pas complètement satisfait, contactez le support sous 7 jours pour un remboursement intégral.',
-  faq5Q: 'Proposez-vous un essai gratuit ?', faq5A: 'Oui ! Nous offrons un essai gratuit de 3 jours pour tester notre service sans risque. Discutez avec Alex, notre assistant commercial, pour obtenir votre essai. Aucune carte bancaire requise.',
+  faq5Q: 'Proposez-vous un essai gratuit ?', faq5A: 'Oui ! Nous offrons un essai gratuit de 24h pour tester notre service sans risque. Discutez avec Alex, notre assistant commercial, pour obtenir votre essai. Aucune carte bancaire requise.',
   ctaTitle: 'Prêt à Commencer ?', ctaDesc: 'Rejoignez 50 000+ clients satisfaits. Commencez votre essai gratuit — sans engagement, sans risque.',
   footerDesc: 'Streaming IPTV Premium avec 25 000+ chaînes, qualité 4K, et activation instantanée.',
   footerQuick: 'Liens Rapides', footerSupport: 'Support', footerLegal: 'Légal',
@@ -526,7 +526,7 @@ ${provider ? `
       </div>
       <div class="faq-item">
         <div class="faq-q" onclick="this.parentElement.classList.toggle('active')">Do you offer a free trial? <span class="icon">+</span></div>
-        <div class="faq-a">Yes! We offer a 3-day free trial so you can test our service risk-free. Chat with Alex, our sales assistant, to get your trial set up instantly. No credit card required.</div>
+        <div class="faq-a">Yes! We offer a 24h free trial so you can test our service risk-free. Chat with Alex, our sales assistant, to get your trial set up instantly. No credit card required.</div>
       </div>
     </div>
   </div>
